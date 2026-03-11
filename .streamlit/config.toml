@@ -1,0 +1,23 @@
+[theme]
+# Fingerpaint Marketing brand colors (FPG_LV06_Full Production Sheet, pages 3/5/9)
+
+# FPG Legacy Orange — primary accent for buttons, sliders, links
+primaryColor = "#FC8549"
+
+# White — brand guidance: "let white dominate, use colors for visual rhythm"
+backgroundColor = "#FFFFFF"
+
+# FPG Cotton — subtle sidebar and input field background
+secondaryBackgroundColor = "#F8F8F8"
+
+# FPG Black
+textColor = "#050607"
+
+font = "sans serif"
+
+# Additional brand reference (apply via CSS as needed):
+# FPG Legacy Purple (Marketing primary): #47254A
+# FPG Plum (tertiary accent):            #880068
+# FPG Electric Pink (tertiary accent):   #FF76BA
+# FPG Legacy Orange (text on white):     #C2521B  ← use for colored text, not #FC8549
+# FPG Legacy Purple light tint:          #DFC4E2
