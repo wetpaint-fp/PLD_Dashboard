@@ -4,26 +4,38 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-**Physician Level Data (PLD) Dashboard** built for Fingerpaint Marketing. A **Streamlit in Snowflake (SiS)** application displaying HCP (Healthcare Professional) campaign analytics for the Brixadi brand. The prototype (`pld_app.py`) uses mock data; production will query live Snowflake tables.
+**Physician Level Data (PLD) Dashboard** built for Fingerpaint Marketing. A **Streamlit in Snowflake (SiS)** application displaying HCP (Healthcare Professional) campaign analytics for the Brixadi brand.
+
+> **Active working file: `pld_app_annotated.py`** — this is the version being developed. `pld_app.py` is an older, unannotated copy; do not edit it.
+
+The prototype uses mock data; production will query live Snowflake tables.
 
 ## Running the App
 
 ```bash
-uv run --with streamlit --with pandas --with plotly streamlit run pld_app.py
+uv run --with streamlit --with pandas --with plotly streamlit run pld_app_annotated.py
 ```
 
 > In production the app runs inside **Streamlit in Snowflake (SiS)**: no external network calls, no file I/O, limited package library. Sidebar radio is used instead of `st.tabs` (not available in SiS).
 
 ## Architecture
 
-Everything lives in `pld_app.py`. Key sections:
+Everything lives in `pld_app_annotated.py`. Key sections:
 
 - **Mock data generation** (`generate_mock_data`): Seeded random data (500 NPIs, 4000 activity rows). Cached with `@st.cache_data`. Will be replaced by Snowpark SQL queries in production.
-- **Analytics functions**: Pure DataFrame computations — `compute_partner_metrics`, `compute_trend_data`, `compute_hierarchy`, `compute_geo_analysis`.
+- **Analytics functions**: Pure DataFrame computations — `compute_partner_metrics`, `compute_trend_data`, `compute_hierarchy`, `compute_geo_analysis`, `compute_creative_metrics`, `compute_segment_metrics`, `compute_segment_reach_by_format`.
 - **Hex map** (`US_HEX_MAP`, `build_hex_map_figure`): Custom pointy-top hexagonal US state grid via Plotly `go.Scatter`. Not a choropleth — each state is a manually placed hex.
-- **Two views** (sidebar radio):
-  - **Partner Performance**: KPI cards → trend chart → reach/CTR bars → hierarchical drill-down (Partner → Channel → Program)
+- **Three views** (sidebar radio):
+  - **Partner Performance**: KPI cards → trend chart → CTR/reach bars by vendor → audience segment charts (CTR + reach) → hierarchical drill-down (Partner → Channel → Program)
+  - **Creative Performance**: KPI cards → CTR/reach by asset → frequency vs. CTR scatter → stacked reach by segment × format family → asset detail table
   - **Geographic Deep Dive**: State hex map or specialty scatter/bubble plot with `st.session_state.highlighted` comparisons
+
+## Color Conventions
+
+- **Reach** → `BRAND["primary"]` (`#47254A`, dark purple)
+- **CTR** → `BRAND["accent"]` (`#FC8549`, orange)
+- **Format families** (Creative page stacked chart) → Programmatic Banner = primary, DocNews Alert = plum (`#880068`), Native Display = secondary (`#BFA8D1`)
+- Fingerpaint Marketing SVG logo is embedded inline in the sidebar (no external HTTP — required for SiS)
 
 ## Data Sources
 

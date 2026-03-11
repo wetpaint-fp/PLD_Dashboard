@@ -7,8 +7,18 @@ A **Streamlit in Snowflake (SiS)** app that visualizes HCP-level ad activity acr
 ## Running Locally
 
 ```bash
-uv run --with streamlit --with pandas --with plotly streamlit run pld_app.py
+uv run --with streamlit --with pandas --with plotly streamlit run pld_app_annotated.py
 ```
+
+> `pld_app_annotated.py` is the active working file. `pld_app.py` is an older unannotated copy — do not edit it.
+
+## Views
+
+| View | Contents |
+|---|---|
+| **Partner Performance** | KPI cards, trend chart, reach/CTR by vendor, audience segment charts, Partner → Channel → Program drill-down table |
+| **Creative Performance** | KPI cards, CTR/reach by asset, frequency vs. CTR scatter, audience segment charts, asset detail table |
+| **Geographic Deep Dive** | Hex map by state, specialty scatter/bubble plot with highlighted comparisons |
 
 ## Data
 
@@ -18,6 +28,14 @@ uv run --with streamlit --with pandas --with plotly streamlit run pld_app.py
 | `BRI_LOOKUP.csv` | Dimension table mapping placement slugs to channel/program/partner names |
 
 See [`raw_data/DATA_DICTIONARY.md`](raw_data/DATA_DICTIONARY.md) for full schema, join logic, and KPIs.
+
+## What's Next
+
+See [`IMPROVEMENTS.md`](IMPROVEMENTS.md) for the full backlog. Top priorities:
+- Conversion funnel (11 conversions in data are currently invisible)
+- Doximity engagement rate (`content_view / headline_view`)
+- Frequency distribution (% of HCPs at 1x / 2–3x / 4–5x / 6x+)
+- Coverage % (reach vs. target list size)
 
 ## Production Deployment
 

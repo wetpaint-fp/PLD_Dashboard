@@ -284,7 +284,27 @@ def generate_mock_data() -> pd.DataFrame:
             "state": random.choice(states),
         })
 
-    # Build 50 fake placement definitions (maps placement name → partner/channel/program/asset)
+    # Audience segments mirror the BRI_LOOKUP "Segment" column in real data.
+    # Assigning segment at the placement level is realistic: in production,
+    # segment comes from BRI_LOOKUP (keyed by placement slug), not per-event.
+    segments = [
+        "Claims-Based Prescribers", "HCP Target List", "Site Retargeting",
+        "Specialty Targeting", "Lookalike Audience", "Conquesting",
+        "High Value HCPs", "Geographic Targeting",
+    ]
+    # Per-segment CTR modifier — site retargeting and high-value lists convert best
+    segment_ctr_bias = {
+        "Claims-Based Prescribers":  0.04,
+        "HCP Target List":           0.02,
+        "Site Retargeting":          0.06,
+        "Specialty Targeting":       0.00,
+        "Lookalike Audience":       -0.01,
+        "Conquesting":              -0.02,
+        "High Value HCPs":           0.03,
+        "Geographic Targeting":      0.00,
+    }
+
+    # Build 50 fake placement definitions (maps placement name → partner/channel/program/asset/segment)
     placements = {}
     for i in range(50):
         pname = f"placement_{i}"
@@ -294,6 +314,7 @@ def generate_mock_data() -> pd.DataFrame:
             "CHANNEL_CATEGORY": random.choice(channels),
             "PROGRAM_FRIENDLY_NAME": random.choice(programs),
             "FP_ASSET_ID": random.choice(asset_map[partner]),
+            "Segment": random.choice(segments),
         }
 
     # Generate 4000 activity events (one row = one ad served to one HCP)
@@ -305,8 +326,9 @@ def generate_mock_data() -> pd.DataFrame:
         pd_detail = placements[pname]
         date = base_date + pd.Timedelta(days=random.randint(0, 179))
 
-        # Bias click probability by specialty, state, and asset
+        # Bias click probability by specialty, state, asset, and segment
         asset_id = pd_detail["FP_ASSET_ID"]
+        segment  = pd_detail["Segment"]
         base_click_prob = 0.05
         if npi_obj["specialty"] == "Oncology":
             base_click_prob += 0.08  # Oncologists click more
@@ -314,7 +336,8 @@ def generate_mock_data() -> pd.DataFrame:
             base_click_prob += 0.03  # High-population states click more
         if npi_obj["specialty"] == "PCP":
             base_click_prob -= 0.02  # PCPs click less
-        base_click_prob += asset_ctr_bias.get(asset_id, 0.0)  # Per-creative bias
+        base_click_prob += asset_ctr_bias.get(asset_id, 0.0)     # Per-creative bias
+        base_click_prob += segment_ctr_bias.get(segment, 0.0)    # Per-segment bias
 
         is_click = random.random() < base_click_prob
 
@@ -332,6 +355,7 @@ def generate_mock_data() -> pd.DataFrame:
             "ACTIVITY_DATE": date.strftime("%Y-%m-%d"),
             "SPECIALTY": npi_obj["specialty"],
             "STATE": npi_obj["state"],
+            "Segment": segment,
         })
 
     return pd.DataFrame(rows)
@@ -792,6 +816,71 @@ def compute_geo_analysis(df: pd.DataFrame, level: str, filter_value: str):
     }
 
 
+def compute_segment_metrics(df: pd.DataFrame, vendor_filter: str) -> pd.DataFrame:
+    """
+    Compute CTR, reach, and impressions per audience segment.
+
+    Segments come from BRI_LOOKUP in real data (via the "Segment" column) or
+    from placement metadata in mock data. One row per segment, sorted by CTR
+    descending so the best-performing segment is always first.
+
+    Note: click-only vendors (NA assets) inflate impression counts here.
+    For a production view, filter to impression-trackable vendors first.
+    """
+    filt = df if vendor_filter == "All" else df[df["VENDOR"] == vendor_filter]
+    filt = filt[filt["Segment"].notna() & (filt["Segment"] != "Unknown")]
+
+    agg = (
+        filt.groupby("Segment")
+        .agg(
+            Impressions=("ACTIVITY_ID", "count"),
+            Clicks=("ACTIVITY_TYPE", lambda s: (s == "Click").sum()),
+            Reach=("NPI", "nunique"),
+        )
+        .reset_index()
+    )
+    agg["CTR"] = np.where(
+        agg["Impressions"] > 0,
+        (agg["Clicks"] / agg["Impressions"]) * 100,
+        0,
+    )
+    return agg.sort_values("CTR", ascending=False).reset_index(drop=True)
+
+
+def compute_segment_reach_by_format(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Compute unique HCP reach per Segment × Format family for the stacked bar
+    on the Creative Performance page.
+
+    Format is derived from FP_ASSET_ID prefix (same logic as compute_creative_metrics):
+      DM### → Programmatic Banner
+      NA### → Native Display
+      AL### → DocNews Alert
+    """
+    filt = df[df["Segment"].notna() & (df["Segment"] != "Unknown")].copy()
+
+    def _fmt(asset_id):
+        if pd.isna(asset_id):
+            return "Other"
+        a = str(asset_id).upper()
+        if a.startswith("DM"):
+            return "Programmatic Banner"
+        if a.startswith("NA"):
+            return "Native Display"
+        if a.startswith("AL"):
+            return "DocNews Alert"
+        return "Other"
+
+    filt["Format"] = filt["FP_ASSET_ID"].apply(_fmt)
+
+    agg = (
+        filt.groupby(["Segment", "Format"])
+        .agg(Reach=("NPI", "nunique"))
+        .reset_index()
+    )
+    return agg
+
+
 def compute_creative_metrics(df: pd.DataFrame) -> dict:
     """
     Compute per-asset and per-format-family performance metrics.
@@ -896,15 +985,18 @@ def main():
     # Sidebar is declared first so widget values (data source, active tab) are
     # available before we decide which dataset to load below.
     with st.sidebar:
-        # Branding header — raw HTML via st.markdown
+        # Branding header — inline SVG logo (no external HTTP; required for SiS)
         st.markdown(
             """
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">
-                <span style="font-size:1.6rem;">🎨</span>
-                <div>
-                    <div style="font-weight:800;font-size:1.15rem;color:#050607;line-height:1.15;">fingerpaint</div>
-                    <div style="font-weight:500;font-size:.95rem;color:#FC8549;line-height:1.15;">marketing</div>
-                </div>
+            <div style="background:#050607;border-radius:8px;padding:10px 14px;margin-bottom:4px;">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 211.14 52.08" style="width:100%;max-width:180px;display:block;">
+                  <defs><style>.st0{fill:#fff}.st1{fill:#ba6af0}</style></defs>
+                  <g>
+                    <path class="st0" d="M12.881,50.705c-4.083-1-5.18-5.781-5.406-9.375-.357-5.803.294-11.624,1.925-17.205-.335.172-.679.324-1.032.456-.526.208-1.222.528-1.729.779-1.029.525-2.01,1.138-2.932,1.833-.703.589-1.647.801-2.534.569-1.729-.751-1.227-2.669-.513-3.823,1.059-1.522,2.51-2.728,4.2-3.491,1.929-.898,3.953-1.576,6.033-2.021C11.627,16.896,19.654.752,30.2.011l.026.023c1.209-.143,2.427.173,3.414.885.954.629,1.409,1.79,1.136,2.9-.299.941-1.246,1.516-2.219,1.349-.8-.147-1.349-.833-2.022-1.23-.086-.052-.175-.099-.267-.139-.043-.008-.091.006-.126-.022-.673-.514-2.657-.109-4.061,1.368-2.589,2.727-5.495,7.642-7.415,12.26,2.536-.271,7.305.45,6.36,3.174-.45,1.3-2.091,1.348-2.9,1.356-1.929.028-3.852.234-5.744.614-2.396,7.485-2.809,15.463-1.2,23.156.356,1.837.965,5.117-1.437,5.116-.292-.005-.582-.043-.864-.116ZM65.993,49.077c-1.769-.566.079-3.082.627-3.916,3.081-4.55,5.063-9.753,5.791-15.2-.167.3-.323.613-.475.9-.278.538-.598,1.054-.958,1.541-1.181,1.439-2.963,2.248-4.824,2.189-2.069-.007-3.447-1.453-4.245-3.2-.429.66-.947,1.259-1.538,1.779-2.156,1.869-5.953,2.626-8.4.879-1.152-.912-1.879-2.258-2.01-3.722-.274-2.486.769-4.637,1.584-6.9.34-.946,1.165-2.472.084-3.014-1.044-.523-3,.2-3.769,1-2.441,2.532-3.362,5.84-4.263,9.148-1.436,5.277-5.913,4.454-5.308.6.215-1.191.568-2.352,1.052-3.461.752-1.843,1.543-3.91,2.413-5.7.112-.23,1.334-2.554.457-2.409-.419.07-.981.99-1.225,1.293-2.415,3.019-4.122,6.52-6.373,9.654-.089.123-.184.244-.277.364v.024c-1.255,1.606-2.824,3.2-4.967,3.278-4.074.152-4.537-3.883-4.124-6.974.156-1.14.413-2.263.769-3.357.657-1.949,1.431-3.856,2.316-5.712.27-.737.64-1.432,1.1-2.068,1.006-1.161,3.088-.821,3.023.9-.084.926-.339,1.829-.751,2.663-.253.582-.485,1.169-.709,1.763-.368.978-2.957,7.331-1.008,7.681.9.161,2.357-1.532,2.875-2.063,1.193-1.482,2.289-3.039,3.281-4.662,1.45-1.989,6.949-10.879,9.989-6.1.3.47.529,1.222,1.058,1.481.648.316,1.364-.1,1.925-.412.683-.392,1.39-.741,2.116-1.045,1.518-.625,4.018-1.3,5.072.462.785,1.319.549,2.964.3,4.4-.35,1.761-.826,3.494-1.422,5.187-.432,1.338-1.216,3-.432,4.36.51.558,1.298.768,2.018.54l.138-.058c2.489-1,3.676-3.654,4.218-5.51.449-4.081,2.68-8.566,6.444-9.689,1.282-.348,2.636-.325,3.906.064,1.186.426,2.208,1.216,2.919,2.256.477.652.89,1.348,1.232,2.08,2.031,4.247,1.482,9.52.981,14.05-.183,1.725-.515,3.431-.99,5.1-.502,1.764-1.154,3.483-1.949,5.136-1.21,2.471-3.281,4.683-6,4.683-.568-.006-1.132-.101-1.671-.28v-.003h0ZM66.764,20.564c-.893,1.162-1.509,2.513-1.8,3.949-.263,1.347-.241,4.473,1.368,5,2.076.673,3.873-1.623,4.765-3.952.979-2.55.903-5.642-1.028-6.55-.195-.092-.407-.138-.622-.137-1.084.182-2.051.791-2.683,1.691h0ZM112.114,43.718c-.596-1.898-1.008-3.849-1.231-5.826-.343-3.487-.253-7.003.269-10.467.102-.741.248-1.476.436-2.2-.177.1-.352.2-.52.288-1.166.6-3.87,1.512-4.484-.292-.512-1.51,1.58-6.743-1.824-5.678-1.255.48-2.322,1.353-3.04,2.489-2.486,3.754-2.171,8.362-3.662,12.473-.4.897-1.451,1.3-2.348.9-.213-.095-.406-.231-.566-.4-.489-.704-.685-1.572-.544-2.418-2.796,1.96-6.139,2.991-9.554,2.944-2.894.094-5.446-1.884-6.077-4.71-.955-3.656-.144-8.556,2.584-11.529,1.7-1.889,3.977-3.164,6.476-3.625.134-.027.27-.056.4-.081,2.094-.39,4.757.2,5.624,2.4,1.328,3.375-1.166,6.155-4.086,7.819-.839.478-1.725.867-2.644,1.161-.904.212-1.786.508-2.635.884-2.071,1.161-1.871,3.952.342,4.361,2.053.376,4.6-.466,6.47-1.26.118-.049.233-.1.35-.159l.068-.047c1.881-1.296,3.229-3.229,3.795-5.442.537-2.377,1.154-4.743,1.594-7.113.175-.941.3-2.294,1.261-2.776.807-.36,1.753.002,2.113.809.052.116.09.238.113.363.312,1.935,1.171,1.269,2.615.388,1.614-.984,3.513-2.442,5.491-1.6,3.406,1.449-.425,5.03,1.046,7.119.919,1.3,2.956-1.076,3.43-1.741.4-.564.78-1.145,1.191-1.7.509-.665,1.087-1.274,1.725-1.817,1.09-1.016,2.506-1.611,3.995-1.678,1.472.013,2.896.519,4.047,1.437,3.99,3.218,3.394,10.746.87,14.625-1.4,2.168-3.922,4.221-6.621,3.127-1.246-.49-2.306-1.359-3.031-2.485.344,4.503,1.516,8.904,3.456,12.982.421.9,1.869,3.6.049,3.966-.359.075-.726.114-1.093.115-3.034-.006-4.954-2.793-5.851-5.605h.001ZM120.867,18.835c-2.129.11-3.373,2.936-3.434,5.671-.058,2.493.733,5.3,2.912,5.464,1.685.126,2.89-2.759,3.158-4.106.276-1.439.219-2.921-.165-4.335-.29-1.018-1.138-2.7-2.4-2.7l-.071.006ZM87.291,18.545c-1.289.567-2.409,1.46-3.25,2.59-.544.681-1.032,2.192-.3,2.882,1.129,1.058,3.187.151,4.494-.6.215-.124.41-.244.578-.35,1.268-.806,2.96-2.341,1.931-3.962-.429-.59-1.135-.914-1.862-.852-.543.007-1.081.106-1.591.293h0ZM186.044,33.378c-.176-.302-.316-.622-.418-.956-.235.266-.488.516-.755.749-2.156,1.87-5.952,2.627-8.4.879-1.152-.912-1.879-2.258-2.01-3.722-.275-2.485.769-4.637,1.585-6.9.34-.946,1.165-2.472.084-3.014-1.045-.523-3,.2-3.77,1-2.442,2.532-3.361,5.841-4.262,9.148-1.437,5.277-5.914,4.454-5.309.6.214-1.191.568-2.352,1.053-3.461.751-1.843,1.543-3.91,2.412-5.7.111-.23,1.333-2.554.456-2.409-.419.07-.981.991-1.224,1.293-2.416,3.019-4.122,6.52-6.373,9.654-.088.123-.184.243-.277.364v.023c-1.256,1.606-2.824,3.2-4.967,3.277-2.661.1-3.776-1.59-4.118-3.632-1.43,1.9-3.981,4.151-6.5,3.41-1.986-.585-3.183-3.45-2.076-5.174-1.096,1.82-2.607,3.355-4.409,4.48-2.679,1.512-6.716,1.353-8.186-1.472-1.193-2.289-.14-5.392.838-7.626,4.891-11.178,12.962-8.923,12.962-8.923,5.2,1.458,4.732,6.753,2.884,10.235s.257,4.3.257,4.3c1.917.638,4.206-3,4.331-3.2.567-3.287,2.053-6.339,3.383-9.371.343-.783.978-1.87,1.92-1.851,2.707.049,1.613,2.964,1.044,4.273-.254.581-.487,1.169-.711,1.763-.368.978-2.957,7.331-1.008,7.681.9.161,2.358-1.532,2.876-2.064,1.192-1.482,2.288-3.04,3.281-4.662,1.449-1.988,6.948-10.879,9.988-6.1.3.47.529,1.223,1.059,1.481.647.316,1.364-.1,1.924-.412.683-.391,1.39-.74,2.116-1.045,1.518-.625,4.018-1.3,5.073.462.784,1.318.548,2.963.3,4.4-.35,1.761-.826,3.494-1.423,5.187-.432,1.339-1.216,3-.432,4.36.51.558,1.297.769,2.018.541l.139-.059c2.737-1.1,3.9-4.258,4.358-6.134.081-.415.162-.825.244-1.23.021-.142.031-.224.031-.224l.013.017c.544-2.745,1.25-5.456,2.113-8.118-.239-.018-.476-.035-.707-.043-1.4.023-2.793-.193-4.12-.638-1.132-.365-1.9-1.419-1.9-2.609.094-.891,1.06-.808,1.739-.783,1.1.042,2.182.228,3.275.313,1.017.079,2.036.11,3.055.128.122-.3.237-.589.366-.889.631-1.463,1.26-3.087,2.625-4.03.621-.529,1.553-.456,2.082.165.213.249.336.562.352.889-.024,1.337-.423,2.64-1.152,3.761-.027.055-.053.111-.08.166,1.3.02,2.6.024,3.912-.032.108,0,.226-.012.348-.022.582-.108,1.183-.042,1.729.188.263.266.373.648.291,1.014-.331,1.128-1.247,1.989-2.394,2.249-.857.22-1.74.321-2.624.3-.27,0-1.8.062-3,.074-.008.021-.019.041-.028.062-1.129,2.523-1.94,5.177-2.415,7.9-.237,1.558-.681,4.131.449,5.464.434.59,1.265.715,1.854.281.007-.005.014-.01.021-.016,1.514-.889,2.647-2.8,3.588-4.193.433-.643.713-1.506,1.422-1.913.642-.363,1.455-.184,1.885.416,1.253,1.953-.833,5.131-1.973,6.6-1.531,1.964-3.532,3.512-5.818,4.5-.56.239-1.161.364-1.77.369-1.288.017-2.485-.665-3.126-1.783v-.006h0ZM133.4,28.822c2.067.926,5.7-2,7.036-3.993,1.46-2.174,2.2-5.246.329-6.377-.335-.204-.721-.31-1.113-.307-3.842,0-9.297,9.31-6.252,10.677h0ZM31.062,13.426c-.144-.108-.218-.332-.349-.5-.162-.169-.314-.346-.455-.532-.369-.694-.341-1.532.073-2.2.42-.513.987-.886,1.625-1.066.023-.009.062-.106.086-.13.142-.088.31-.124.475-.1.187,0,.374.021.557.063.373.089.726.245,1.043.461.293-.1.548.168.925.291.074.023.159,0,.22.033.163.083.932.379,1.1.168.046.071-.053.224-.064.326.096.1.171.219.219.35,0,.006.2.069.226.088.057.039.1.091.158.135s.126.069.18.113c.105.137.159.306.153.479.006.075-.01.15-.048.215-.028.043-.136.151-.193.141-.2-.035-.234-.148-.355-.272-.227.008-.363.181-.617.143-.178.202-.272.463-.263.732-.49-.128-1.012-.033-1.425.26-.31.182-.648.311-1,.381-.432.367-.958.605-1.519.689-.273-.004-.538-.098-.752-.268Z"/>
+                    <path class="st1" d="M155.88,13.626c-.9-.144-1.64-.786-1.909-1.657-.022-.065-.039-.132-.05-.2-.113-1.091.488-2.132,1.49-2.579.308-.141.635-.236.971-.283.557-.07,1.122.017,1.632.251.213-.016.428.016.627.094.229.104.487.124.729.056h.278c.217.015.436.005.651-.03.154-.031.271-.135.427-.125.231.013.412.213.628.2.328-.019.485-.269.8-.327.33.11.814.414,1-.025.187-.07.394-.057.571.034.146.086.324.101.483.041.074-.065-.043-.166.025-.226.331-.15.5.215.7.352.289.062.584.095.88.1.112-.063.134-.217.174-.351.239-.132.5.061.729.1.16-.042.25-.152.4-.2.207.135.454.197.7.176.181.186.452.255.7.176.148.096.33.124.5.075.021-.372.183-.735.578-.653.119.111,0,.241.025.351.04.168.252.284.2.527.105.124.278.165.427.1.072-.143-.017-.331.226-.327.057.215.268.248.528.2.1-.015-.012.074.024.151.117.06.22.146.3.251.3-.172.464.112.629.226.016.184-.157.179-.227.276-.203-.024-.404-.066-.6-.126-.032-.266-.539-.467-.679-.175.066.244.272.347.352.577-.044.11-.137.194-.251.227-.159-.199-.38-.34-.627-.4-.116.253-.1.831-.527.678,0-.455-.373-.71-.779-.4-.076.057-.1.2-.176.276-.058.057-.2.087-.276.151-.128.1-.121.2-.226.2-.14.007-.231-.213-.377-.226s-.17.113-.326.2c-.111.063-.263.058-.326.1s-.1.166-.177.151c-.145-.073-.187-.248-.4-.251-.298.141-.609.25-.93.326-.12.045-.221.167-.351.176-.09.002-.18-.01-.267-.034-.141-.049-.296-.046-.435.009-.081.062-.1.186-.176.251-.338-.115-.704-.117-1.043-.006-.225.058-.457.085-.69.08-.093.033-.15.157-.277.176-.1.017-.266-.072-.351-.075-.3-.011-.722.2-1.106.2-.378.023-.755.064-1.129.125-1.2.152-2,1.069-3.259,1.069-.146.002-.292-.008-.436-.03v-.003h-.001Z"/>
+                    <path class="st1" d="M128.912,42.526v9.416h1.931v-6.152h.078l2.437,6.106h1.315l2.437-6.084h.078v6.129h1.931v-9.416h-2.455l-2.595,6.329h-.109l-2.59-6.327-2.459-.002h0ZM143.027,51.942l.697-2.147h3.398l.7,2.147h2.133l-3.246-9.416h-2.566l-3.251,9.416h2.133ZM144.229,48.241l1.158-3.564h.074l1.158,3.564h-2.39ZM151.735,51.942h1.992v-3.339h1.453l1.783,3.339h2.198l-2.001-3.66c1.07-.446,1.739-1.523,1.664-2.68,0-1.871-1.237-3.076-3.374-3.076h-3.715v9.416ZM153.727,47.004v-2.851h1.343c1.149,0,1.706.51,1.706,1.448s-.557,1.402-1.693,1.402h-1.356ZM160.879,51.942h1.992v-2.676l.979-1.195,2.579,3.871h2.381l-3.536-5.2,3.494-4.216h-2.39l-3.386,4.152h-.124v-4.152h-1.992l.004,9.416h0ZM170.455,51.942h6.363v-1.641h-4.372v-2.248h4.028v-1.642h-4.028v-2.243h4.352v-1.641h-6.342v9.416h0ZM178.675,44.167h2.883v7.775h1.968v-7.775h2.882v-1.641h-7.733v1.641h-.001ZM190.329,42.526h-1.992v9.416h1.992v-9.416ZM200.494,42.526h-1.983v5.922h-.083l-4.066-5.922h-1.747v9.416h1.992v-5.927h.069l4.097,5.927h1.72v-9.416h0ZM209.025,45.567h2.023c-.333-1.933-2.071-3.302-4.028-3.172-2.49,0-4.405,1.793-4.405,4.847,0,2.979,1.793,4.828,4.446,4.828,2.09.157,3.91-1.408,4.069-3.498.012-.161.014-.324.005-.486v-1.183h-3.939v1.494h2.023c.008,1.054-.84,1.915-1.893,1.923-.085,0-.17-.004-.254-.015-1.494,0-2.437-1.118-2.437-3.088s.979-3.067,2.418-3.067c.914-.068,1.745.529,1.973,1.417Z"/>
+                  </g>
+                </svg>
             </div>
             """,
             unsafe_allow_html=True,
@@ -1075,25 +1167,6 @@ def main():
         chart_df = metrics["chart"]
 
         with c1:
-            st.markdown('<div class="section-title">Reach by Partner</div>', unsafe_allow_html=True)
-            fig_reach = go.Figure(
-                go.Bar(
-                    x=chart_df["VENDOR"],
-                    y=chart_df["Reach"],
-                    marker_color=BRAND["primary"],
-                    marker_cornerradius=6,
-                )
-            )
-            fig_reach.update_layout(
-                height=300,
-                margin=dict(l=20, r=20, t=10, b=20),
-                plot_bgcolor="white",
-                paper_bgcolor="white",
-                yaxis=dict(gridcolor="#f1f5f9"),
-            )
-            st.plotly_chart(fig_reach, use_container_width=True)
-
-        with c2:
             st.markdown('<div class="section-title">CTR % by Partner</div>', unsafe_allow_html=True)
             fig_ctr = go.Figure(
                 go.Bar(
@@ -1114,6 +1187,76 @@ def main():
                 yaxis=dict(gridcolor="#f1f5f9", title="CTR %"),
             )
             st.plotly_chart(fig_ctr, use_container_width=True)
+
+        with c2:
+            st.markdown('<div class="section-title">Reach by Partner</div>', unsafe_allow_html=True)
+            fig_reach = go.Figure(
+                go.Bar(
+                    x=chart_df["VENDOR"],
+                    y=chart_df["Reach"],
+                    marker_color=BRAND["primary"],
+                    marker_cornerradius=6,
+                )
+            )
+            fig_reach.update_layout(
+                height=300,
+                margin=dict(l=20, r=20, t=10, b=20),
+                plot_bgcolor="white",
+                paper_bgcolor="white",
+                yaxis=dict(gridcolor="#f1f5f9"),
+            )
+            st.plotly_chart(fig_reach, use_container_width=True)
+
+        # ── Audience Segment Performance ───────────────────────────────────────
+        st.markdown(
+            '<div class="section-title">🎯  Performance by Audience Segment</div>',
+            unsafe_allow_html=True,
+        )
+        seg_df = compute_segment_metrics(df, vendor_filter)
+        if len(seg_df):
+            seg_ordered = seg_df.sort_values("CTR", ascending=True)  # Ascending for horizontal bar (highest ends up on top)
+            seg_h = max(280, len(seg_ordered) * 40)
+
+            sc1, sc2 = st.columns(2)
+            with sc1:
+                st.markdown('<div class="section-title" style="font-size:.8rem;">CTR % by Segment</div>', unsafe_allow_html=True)
+                fig_seg_ctr = go.Figure(go.Bar(
+                    x=seg_ordered["CTR"],
+                    y=seg_ordered["Segment"],
+                    orientation="h",
+                    marker_color=BRAND["accent"],
+                    marker_cornerradius=4,
+                    text=seg_ordered["CTR"].round(2).astype(str) + "%",
+                    textposition="outside",
+                ))
+                fig_seg_ctr.update_layout(
+                    height=seg_h,
+                    margin=dict(l=20, r=60, t=10, b=20),
+                    plot_bgcolor="white", paper_bgcolor="white",
+                    xaxis=dict(gridcolor="#f1f5f9", title="CTR %"),
+                    yaxis=dict(tickfont=dict(size=11)),
+                )
+                st.plotly_chart(fig_seg_ctr, use_container_width=True, key="pp_seg_ctr")
+
+            with sc2:
+                st.markdown('<div class="section-title" style="font-size:.8rem;">Reach by Segment</div>', unsafe_allow_html=True)
+                fig_seg_reach = go.Figure(go.Bar(
+                    x=seg_ordered["Reach"],
+                    y=seg_ordered["Segment"],
+                    orientation="h",
+                    marker_color=BRAND["primary"],
+                    marker_cornerradius=4,
+                ))
+                fig_seg_reach.update_layout(
+                    height=seg_h,
+                    margin=dict(l=20, r=20, t=10, b=20),
+                    plot_bgcolor="white", paper_bgcolor="white",
+                    xaxis=dict(gridcolor="#f1f5f9", title="Unique HCPs"),
+                    yaxis=dict(tickfont=dict(size=11)),
+                )
+                st.plotly_chart(fig_seg_reach, use_container_width=True, key="pp_seg_reach")
+        else:
+            st.info("No segment data available.")
 
         # ── Drill-Down Table ───────────────────────────────────────────────────
         st.markdown(
@@ -1357,6 +1500,56 @@ def main():
                 yaxis=dict(gridcolor="#f1f5f9", title="CTR %"),
             )
             st.plotly_chart(fig_freq, use_container_width=True, key="freq_vs_ctr")
+
+        # ── Audience Segment Performance ───────────────────────────────────────
+        # Stacked reach by format family answers "which formats are reaching
+        # which audience segments?" — the creative-page-specific question.
+        st.markdown(
+            '<div class="section-title">🎯  Reach by Audience Segment &amp; Format</div>',
+            unsafe_allow_html=True,
+        )
+        cp_seg_fmt = compute_segment_reach_by_format(df)
+        if len(cp_seg_fmt):
+            # Sort segments by total reach descending so largest bar is on top
+            seg_totals = cp_seg_fmt.groupby("Segment")["Reach"].sum().sort_values()
+            seg_order = seg_totals.index.tolist()  # ascending → top of horizontal bar = highest
+
+            fmt_colors = {
+                "Programmatic Banner": BRAND["primary"],
+                "DocNews Alert":       BRAND["plum"],
+                "Native Display":      BRAND["secondary"],
+                "Other":               BRAND["neutral"],
+            }
+
+            fig_stacked = go.Figure()
+            for fmt, color in fmt_colors.items():
+                subset = cp_seg_fmt[cp_seg_fmt["Format"] == fmt]
+                if subset.empty:
+                    continue
+                # Align to full segment list so every trace has the same y-axis length
+                reach_by_seg = subset.set_index("Segment")["Reach"].reindex(seg_order, fill_value=0)
+                fig_stacked.add_trace(go.Bar(
+                    name=fmt,
+                    x=reach_by_seg.values,
+                    y=reach_by_seg.index,
+                    orientation="h",
+                    marker_color=color,
+                    marker_cornerradius=3,
+                ))
+
+            fig_stacked.update_layout(
+                barmode="stack",
+                height=max(300, len(seg_order) * 40),
+                margin=dict(l=20, r=20, t=10, b=20),
+                plot_bgcolor="white",
+                paper_bgcolor="white",
+                xaxis=dict(gridcolor="#f1f5f9", title="Unique HCPs"),
+                yaxis=dict(tickfont=dict(size=11)),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+            )
+            st.plotly_chart(fig_stacked, use_container_width=True, key="cp_seg_stacked")
+        else:
+            st.info("No segment data available.")
 
         # ── Asset Detail Table ─────────────────────────────────────────────────
         st.markdown(
