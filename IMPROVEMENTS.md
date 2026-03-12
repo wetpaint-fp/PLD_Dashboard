@@ -28,7 +28,11 @@
 
 ### Audience Segments
 - [x] Performance by `Segment` from BRI_LOOKUP (23 unique audience segments)
+- [x] Stacked reach by segment × format family (Creative page only — answers "which formats reach which segments?")
 - [ ] Performance by `TARGETING DETAILS` (32 unique values, currently unused)
+
+### UI Polish
+- [ ] Global hover tooltip styling — branded bgcolor, border color, font (deferred; apply via Plotly template at top of app)
 
 ---
 
