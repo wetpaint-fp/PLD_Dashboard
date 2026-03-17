@@ -71,6 +71,14 @@ BRAND = {
     "palette":   ["#FC8549", "#47254A", "#880068", "#FF76BA", "#C2521B", "#556979"],
 }
 
+# Shared Plotly tooltip style — applied to every figure via fig.update_traces().
+PLOTLY_HOVERLABEL = dict(
+    bgcolor="rgba(255,255,255,0.8)",
+    bordercolor="#e2e8f0",
+    font=dict(color=BRAND["neutral"], size=12),
+    align="left",
+)
+
 # Prescriber journey funnel order, derived from the BRI_LOOKUP "Segment" column.
 # Segments are sub-groups of the HCP Target List, ordered from coldest audience
 # (never heard of Brixadi) to hottest (active champion / brand advocate).
@@ -1189,6 +1197,7 @@ def main():
                 name="Unique Reach (NPIs)",
                 marker_color=BRAND["primary"],
                 marker_cornerradius=4,  # Rounded bar tops (Plotly 5.12+)
+                hovertemplate="<b>%{x}</b><br>Reach:<br>%{y:,}<extra></extra>",
             ),
             secondary_y=False,  # → left axis
         )
@@ -1202,6 +1211,7 @@ def main():
                 mode="lines+markers",  # Draw both line and dot markers
                 line=dict(color=BRAND["accent"], width=3),
                 marker=dict(size=7),
+                hovertemplate="<b>%{x}</b><br>Avg Frequency:<br>%{y:.1f}<extra></extra>",
             ),
             secondary_y=True,   # → right axis
         )
@@ -1220,6 +1230,7 @@ def main():
         # st.plotly_chart() renders the Plotly figure.
         # use_container_width=True makes it fill the available column width
         # rather than using Plotly's default fixed pixel width.
+        fig_trend.update_traces(hoverlabel=PLOTLY_HOVERLABEL)
         st.plotly_chart(fig_trend, use_container_width=True)
 
         # ── Side-by-side Bar Charts ────────────────────────────────────────────
@@ -1240,6 +1251,7 @@ def main():
                     # text= adds value labels on each bar
                     text=chart_df["CTR"].round(2).astype(str) + "%",
                     textposition="outside",  # Labels float above bar tops
+                    hovertemplate="<b>%{x}</b><br>CTR:<br>%{y:.2f}%<extra></extra>",
                 )
             )
             fig_ctr.update_layout(
@@ -1249,6 +1261,7 @@ def main():
                 paper_bgcolor="white",
                 yaxis=dict(gridcolor="#f1f5f9", title="CTR %"),
             )
+            fig_ctr.update_traces(hoverlabel=PLOTLY_HOVERLABEL)
             st.plotly_chart(fig_ctr, use_container_width=True)
 
         with c2:
@@ -1259,6 +1272,7 @@ def main():
                     y=chart_df["Reach"],
                     marker_color=BRAND["primary"],
                     marker_cornerradius=6,
+                    hovertemplate="<b>%{x}</b><br>Reach:<br>%{y:,}<extra></extra>",
                 )
             )
             fig_reach.update_layout(
@@ -1268,6 +1282,7 @@ def main():
                 paper_bgcolor="white",
                 yaxis=dict(gridcolor="#f1f5f9"),
             )
+            fig_reach.update_traces(hoverlabel=PLOTLY_HOVERLABEL)
             st.plotly_chart(fig_reach, use_container_width=True)
 
         # ── CTR by Stage × Partner Heatmap ────────────────────────────────────
@@ -1295,11 +1310,33 @@ def main():
             sv_agg["Clicks"] / sv_agg["Impressions"] * 100,
             np.nan,
         )
+        # Compute global CTR range from unfiltered data so the color scale
+        # stays anchored when a vendor filter is applied.
+        _global_seg = df[df["Segment"].notna() & (df["Segment"] != "Unknown")]
+        _global_seg = _global_seg[~_global_seg["FP_ASSET_ID"].str.startswith("NA", na=False)]
+        _global_sv_agg = (
+            _global_seg.groupby(["Segment", "VENDOR"])
+            .agg(
+                Impressions=("ACTIVITY_ID", "count"),
+                Clicks=("ACTIVITY_TYPE", lambda s: (s == "Click").sum()),
+            )
+            .reset_index()
+        )
+        _global_sv_agg["CTR"] = np.where(
+            _global_sv_agg["Impressions"] > 0,
+            _global_sv_agg["Clicks"] / _global_sv_agg["Impressions"] * 100,
+            np.nan,
+        )
+        _sv_zmin = float(_global_sv_agg["CTR"].min(skipna=True))
+        _sv_zmax = float(_global_sv_agg["CTR"].max(skipna=True))
         if len(sv_agg):
             pivot_sv  = sv_agg.pivot(index="Segment", columns="VENDOR", values="CTR")
+            # Reindex rows to always show all known segments (gaps become NaN → "—").
+            all_known_segs = [s for s in SEGMENT_FUNNEL_ORDER if s in
+                              df["Segment"].dropna().unique().tolist()]
+            pivot_sv  = pivot_sv.reindex(all_known_segs)
             funnel_pos = {s: i for i, s in enumerate(SEGMENT_FUNNEL_ORDER)}
             row_order  = sorted(pivot_sv.index, key=lambda s: funnel_pos.get(s, 999))
-            pivot_sv   = pivot_sv.loc[row_order]
             z_vals     = pivot_sv.values.tolist()
             text_vals  = [[f"{v:.1f}%" if v == v else "—" for v in row] for row in z_vals]
             fig_sv = go.Figure(go.Heatmap(
@@ -1307,10 +1344,12 @@ def main():
                 x=pivot_sv.columns.tolist(),
                 y=pivot_sv.index.tolist(),
                 colorscale=[[0, "#E8DEEE"], [0.5, "#8A5CA8"], [1, "#47254A"]],
+                zmin=_sv_zmin,
+                zmax=_sv_zmax,
                 text=text_vals,
                 texttemplate="%{text}",
                 textfont=dict(size=11),
-                hovertemplate="<b>%{y}</b><br>Partner: %{x}<br>CTR: %{text}<extra></extra>",
+                hovertemplate="<b>%{y}</b><br>Partner:<br>%{x}<br>CTR:<br>%{text}<extra></extra>",
                 showscale=True,
                 colorbar=dict(title="CTR %", thickness=12, len=0.7),
             ))
@@ -1322,6 +1361,7 @@ def main():
                 xaxis=dict(side="bottom", tickfont=dict(size=11)),
                 yaxis=dict(tickfont=dict(size=11), autorange="reversed"),
             )
+            fig_sv.update_traces(hoverlabel=PLOTLY_HOVERLABEL)
             st.plotly_chart(fig_sv, use_container_width=True, key="pp_seg_vendor_heatmap")
         else:
             st.info("No segment data available.")
@@ -1436,6 +1476,7 @@ def main():
                 marker_cornerradius=4,
                 text=asset_ordered["CTR"].round(2).astype(str) + "%",
                 textposition="outside",
+                hovertemplate="<b>%{y}</b><br>CTR:<br>%{x:.2f}%<extra></extra>",
             ))
             fig_ctr.update_layout(
                 height=bar_h,
@@ -1444,6 +1485,7 @@ def main():
                 xaxis=dict(gridcolor="#f1f5f9", title="CTR %"),
                 yaxis=dict(tickfont=dict(size=11)),
             )
+            fig_ctr.update_traces(hoverlabel=PLOTLY_HOVERLABEL)
             st.plotly_chart(fig_ctr, use_container_width=True, key="ctr_by_asset")
 
         with c2:
@@ -1458,6 +1500,7 @@ def main():
                     for f in asset_ordered["Format"]
                 ],
                 marker_cornerradius=4,
+                hovertemplate="<b>%{y}</b><br>Reach:<br>%{x:,}<extra></extra>",
             ))
             fig_reach.update_layout(
                 height=bar_h,
@@ -1466,6 +1509,7 @@ def main():
                 xaxis=dict(gridcolor="#f1f5f9", title="Unique HCPs"),
                 yaxis=dict(tickfont=dict(size=11)),
             )
+            fig_reach.update_traces(hoverlabel=PLOTLY_HOVERLABEL)
             st.plotly_chart(fig_reach, use_container_width=True, key="reach_by_asset")
 
         # ── Native Display — clicks only ────────────────────────────────────────
@@ -1482,6 +1526,7 @@ def main():
                     marker_cornerradius=4,
                     text=nd_ordered["Clicks"].astype(str),
                     textposition="outside",
+                    hovertemplate="<b>%{y}</b><br>Clicks:<br>%{x:,}<extra></extra>",
                 ))
                 fig_nd_clicks.update_layout(
                     height=max(200, len(nd_ordered) * 36),
@@ -1490,6 +1535,7 @@ def main():
                     xaxis=dict(gridcolor="#f1f5f9", title="Clicks"),
                     yaxis=dict(tickfont=dict(size=11)),
                 )
+                fig_nd_clicks.update_traces(hoverlabel=PLOTLY_HOVERLABEL)
                 st.plotly_chart(fig_nd_clicks, use_container_width=True, key="nd_clicks")
             with nd_c2:
                 fig_nd_reach = go.Figure(go.Bar(
@@ -1499,6 +1545,7 @@ def main():
                     marker_color=BRAND["secondary"],
                     marker_opacity=0.75,
                     marker_cornerradius=4,
+                    hovertemplate="<b>%{y}</b><br>Reach:<br>%{x:,}<extra></extra>",
                 ))
                 fig_nd_reach.update_layout(
                     height=max(200, len(nd_ordered) * 36),
@@ -1507,6 +1554,7 @@ def main():
                     xaxis=dict(gridcolor="#f1f5f9", title="Unique HCPs"),
                     yaxis=dict(tickfont=dict(size=11)),
                 )
+                fig_nd_reach.update_traces(hoverlabel=PLOTLY_HOVERLABEL)
                 st.plotly_chart(fig_nd_reach, use_container_width=True, key="nd_reach")
 
         # ── Format Family Summary & Frequency vs CTR ───────────────────────────
@@ -1526,6 +1574,7 @@ def main():
                 marker_cornerradius=6,
                 text=fmt_ctr["CTR"].round(2).astype(str) + "%",
                 textposition="outside",
+                hovertemplate="<b>%{x}</b><br>CTR:<br>%{y:.2f}%<extra></extra>",
             ))
             fig_fmt.update_layout(
                 height=300,
@@ -1534,6 +1583,7 @@ def main():
                 paper_bgcolor="white",
                 yaxis=dict(gridcolor="#f1f5f9", title="CTR %"),
             )
+            fig_fmt.update_traces(hoverlabel=PLOTLY_HOVERLABEL)
             st.plotly_chart(fig_fmt, use_container_width=True, key="ctr_by_format")
 
         with c4:
@@ -1557,9 +1607,9 @@ def main():
                 customdata=scatter_assets[["Asset", "Reach", "AvgFreq", "CTR"]].values,
                 hovertemplate=(
                     "<b>%{customdata[0]}</b><br>"
-                    "Reach: %{customdata[1]}<br>"
-                    "Avg Freq: %{customdata[2]:.1f}<br>"
-                    "CTR: %{customdata[3]:.2f}%<extra></extra>"
+                    "Reach:<br>%{customdata[1]}<br>"
+                    "Avg Freq:<br>%{customdata[2]:.1f}<br>"
+                    "CTR:<br>%{customdata[3]:.2f}%<extra></extra>"
                 ),
             ))
             fig_freq.update_layout(
@@ -1570,6 +1620,7 @@ def main():
                 xaxis=dict(gridcolor="#f1f5f9", title="Avg Frequency per HCP"),
                 yaxis=dict(gridcolor="#f1f5f9", title="CTR %"),
             )
+            fig_freq.update_traces(hoverlabel=PLOTLY_HOVERLABEL)
             st.plotly_chart(fig_freq, use_container_width=True, key="freq_vs_ctr")
 
         # ── Audience Segment × Format CTR Heatmap ─────────────────────────────
@@ -1628,7 +1679,7 @@ def main():
                 text=text_vals,
                 texttemplate="%{text}",
                 textfont=dict(size=11),
-                hovertemplate="<b>%{y}</b><br>Format: %{x}<br>%{text}<extra></extra>",
+                hovertemplate="<b>%{y}</b><br>Format:<br>%{x}<br>%{text}<extra></extra>",
                 showscale=True,
                 colorbar=dict(title="CTR %", thickness=12, len=0.7),
             ))
@@ -1640,6 +1691,7 @@ def main():
                 xaxis=dict(side="bottom", tickfont=dict(size=11)),
                 yaxis=dict(tickfont=dict(size=11), autorange="reversed"),
             )
+            fig_cp_heat.update_traces(hoverlabel=PLOTLY_HOVERLABEL)
             st.plotly_chart(fig_cp_heat, use_container_width=True, key="cp_seg_format_heatmap")
         else:
             st.info("No segment data available.")
@@ -1713,7 +1765,7 @@ def main():
                     marker_cornerradius=4,
                     text=all_segs["Reach"].apply(lambda v: f"{v:,}"),
                     textposition="outside",
-                    hovertemplate="<b>%{y}</b><br>HCPs reached: %{x:,}<extra></extra>",
+                    hovertemplate="<b>%{y}</b><br>HCPs reached:<br>%{x:,}<extra></extra>",
                 ))
                 fig_seg_bar.update_layout(
                     height=360,
@@ -1723,6 +1775,7 @@ def main():
                     xaxis=dict(gridcolor="#f1f5f9", title="Unique HCPs"),
                     yaxis=dict(tickfont=dict(size=11)),
                 )
+                fig_seg_bar.update_traces(hoverlabel=PLOTLY_HOVERLABEL)
                 st.plotly_chart(fig_seg_bar, use_container_width=True, key="ha_seg_bar")
 
             with jc2:
@@ -1765,7 +1818,7 @@ def main():
                     marker_cornerradius=4,
                     text=ctr_by_stage["CTR"].round(2).astype(str) + "%",
                     textposition="outside",
-                    hovertemplate="<b>%{y}</b><br>CTR: %{x:.2f}%<extra></extra>",
+                    hovertemplate="<b>%{y}</b><br>CTR:<br>%{x:.2f}%<extra></extra>",
                 ))
                 fig_ctr_stage.update_layout(
                     height=360,
@@ -1775,6 +1828,7 @@ def main():
                     xaxis=dict(gridcolor="#f1f5f9", title="CTR %"),
                     yaxis=dict(tickfont=dict(size=11), autorange="reversed"),
                 )
+                fig_ctr_stage.update_traces(hoverlabel=PLOTLY_HOVERLABEL)
                 st.plotly_chart(fig_ctr_stage, use_container_width=True, key="ha_journey")
         else:
             st.info("No segment data available.")
@@ -1947,6 +2001,7 @@ def main():
                 # key= on st.plotly_chart() prevents flickering when the same
                 # chart re-renders with new data. Without it, Streamlit may
                 # re-create the chart element from scratch and cause a flash.
+                fig_map.update_traces(hoverlabel=PLOTLY_HOVERLABEL)
                 st.plotly_chart(fig_map, use_container_width=True, key="hex_map")
 
                 # Manual color scale legend (Plotly's built-in colorbar doesn't
@@ -2023,9 +2078,9 @@ def main():
                         customdata=scatter_df[["name", "npiCount", "impressions", "ctr"]].values,
                         hovertemplate=(
                             "<b>%{customdata[0]}</b><br>"
-                            "HCPs: %{customdata[1]}<br>"
-                            "Avg Freq: %{customdata[2]:.1f}<br>"
-                            "CTR: %{customdata[3]:.2f}%<extra></extra>"
+                            "HCPs:<br>%{customdata[1]}<br>"
+                            "Avg Freq:<br>%{customdata[2]:.1f}<br>"
+                            "CTR:<br>%{customdata[3]:.2f}%<extra></extra>"
                             # <extra></extra> suppresses Plotly's default
                             # trace name tooltip suffix
                         ),
@@ -2039,6 +2094,7 @@ def main():
                     xaxis=dict(title="Avg Frequency per HCP", gridcolor="#f1f5f9"),
                     yaxis=dict(title="CTR %", gridcolor="#f1f5f9"),
                 )
+                fig_scatter.update_traces(hoverlabel=PLOTLY_HOVERLABEL)
                 st.plotly_chart(fig_scatter, use_container_width=True, key="scatter")
 
                 st.markdown(

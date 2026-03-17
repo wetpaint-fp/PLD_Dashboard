@@ -22,20 +22,50 @@ uv run --with streamlit --with pandas --with plotly streamlit run pld_app_annota
 
 Everything lives in `pld_app_annotated.py`. Key sections:
 
-- **Mock data generation** (`generate_mock_data`): Seeded random data (500 NPIs, 4000 activity rows). Cached with `@st.cache_data`. Will be replaced by Snowpark SQL queries in production.
-- **Analytics functions**: Pure DataFrame computations — `compute_partner_metrics`, `compute_trend_data`, `compute_hierarchy`, `compute_geo_analysis`, `compute_creative_metrics`, `compute_segment_metrics`, `compute_segment_reach_by_format`.
+- **Design tokens**: `BRAND` dict (colors), `SEGMENT_FUNNEL_ORDER` list (prescriber journey stage order), `PLOTLY_HOVERLABEL` dict (shared tooltip style applied to every Plotly figure).
+- **Mock data generation** (`generate_mock_data`): Seeded random data (500 NPIs, 4000 activity rows). Cached with `@st.cache_data`. Will be replaced by Snowpark SQL queries in production. Segments use real BRI_LOOKUP taxonomy with weighted distribution.
+- **Analytics functions**: Pure DataFrame computations — `compute_partner_metrics`, `compute_trend_data`, `compute_hierarchy`, `compute_geo_analysis`, `compute_creative_metrics`, `compute_segment_metrics`, `compute_segment_by_format`.
 - **Hex map** (`US_HEX_MAP`, `build_hex_map_figure`): Custom pointy-top hexagonal US state grid via Plotly `go.Scatter`. Not a choropleth — each state is a manually placed hex.
 - **Three views** (sidebar radio):
-  - **Partner Performance**: KPI cards → trend chart → CTR/reach bars by vendor → audience segment charts (CTR + reach) → hierarchical drill-down (Partner → Channel → Program)
-  - **Creative Performance**: KPI cards → CTR/reach by asset → frequency vs. CTR scatter → stacked reach by segment × format family → asset detail table
-  - **Geographic Deep Dive**: State hex map or specialty scatter/bubble plot with `st.session_state.highlighted` comparisons
+  - **Partner Performance**: KPI cards → trend chart → CTR/reach bars by vendor → CTR % by Stage × Partner heatmap → hierarchical drill-down (Partner → Channel → Program)
+  - **Creative Performance**: KPI cards → CTR/reach by asset → frequency vs. CTR scatter → CTR % by Segment × Format heatmap → asset detail table
+  - **HCP Audience**: Reach by Journey Stage bar + CTR by Journey Stage bar → state hex map or specialty scatter/bubble plot with `st.session_state.highlighted` comparisons
+
+## Segment Taxonomy
+
+Segments come from the `Segment` column in BRI_LOOKUP. Canonical order is defined in `SEGMENT_FUNNEL_ORDER`:
+
+```python
+SEGMENT_FUNNEL_ORDER = [
+    "Unaware", "Educate", "Aware", "Trialing",
+    "Adopting", "Advocating", "Deciles Ai", "Site Visitors",
+]
+```
+
+The first 6 are prescriber journey stages (used in HCP Audience page journey charts). Deciles Ai and Site Visitors are separate targeting pools — excluded from journey charts, included in heatmaps.
 
 ## Color Conventions
 
 - **Reach** → `BRAND["primary"]` (`#47254A`, dark purple)
 - **CTR** → `BRAND["accent"]` (`#FC8549`, orange)
 - **Format families** (Creative page stacked chart) → Programmatic Banner = primary, DocNews Alert = plum (`#880068`), Native Display = secondary (`#BFA8D1`)
+- **Heatmaps** → colorscale light→dark purple: `[[0, "#E8DEEE"], [0.5, "#8A5CA8"], [1, "#47254A"]]`; `zmin`/`zmax` pinned to global range so filters don't reset the scale
 - Fingerpaint Marketing SVG logo is embedded inline in the sidebar (no external HTTP — required for SiS)
+
+## Tooltip Styling
+
+All Plotly figures use a shared `PLOTLY_HOVERLABEL` constant (defined near `BRAND`):
+
+```python
+PLOTLY_HOVERLABEL = dict(
+    bgcolor="rgba(255,255,255,0.8)",
+    bordercolor="#e2e8f0",
+    font=dict(color=BRAND["neutral"], size=12),
+    align="left",
+)
+```
+
+Applied via `fig.update_traces(hoverlabel=PLOTLY_HOVERLABEL)` before every `st.plotly_chart()` call. To restyle tooltips globally, edit this one dict. All `hovertemplate` strings put labels and values on separate lines (`Label:<br>value`).
 
 ## Data Sources
 
