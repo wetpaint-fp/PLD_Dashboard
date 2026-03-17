@@ -1548,7 +1548,7 @@ def main():
         chart_df = metrics["chart"]
 
         with c1:
-            st.markdown(f'<div class="section-title">{_icon(_IC_ARROW_TRENDING_UP)}CTR % by Partner</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="section-title">{_icon(_IC_CURSOR_RIPPLE)}CTR % by Partner</div>', unsafe_allow_html=True)
             fig_ctr = go.Figure(
                 go.Bar(
                     x=chart_df["VENDOR"],
@@ -1572,7 +1572,7 @@ def main():
             st.plotly_chart(fig_ctr, use_container_width=True)
 
         with c2:
-            st.markdown(f'<div class="section-title">{_icon(_IC_USERS)}Reach by Partner</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="section-title">{_icon(_IC_MEGAPHONE)}Reach by Partner</div>', unsafe_allow_html=True)
             fig_reach = go.Figure(
                 go.Bar(
                     x=chart_df["VENDOR"],
@@ -1770,7 +1770,7 @@ def main():
         c1, c2 = st.columns(2)
 
         with c1:
-            st.markdown(f'<div class="section-title">{_icon(_IC_ARROW_TRENDING_UP)}CTR % by Asset</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="section-title">{_icon(_IC_CURSOR_RIPPLE)}CTR % by Asset</div>', unsafe_allow_html=True)
             fig_ctr = go.Figure(go.Bar(
                 x=asset_ordered["CTR"],
                 y=asset_ordered["Asset"],
@@ -1796,7 +1796,7 @@ def main():
             st.plotly_chart(fig_ctr, use_container_width=True, key="ctr_by_asset")
 
         with c2:
-            st.markdown(f'<div class="section-title">{_icon(_IC_USERS)}Reach by Asset</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="section-title">{_icon(_IC_MEGAPHONE)}Reach by Asset</div>', unsafe_allow_html=True)
             fig_reach = go.Figure(go.Bar(
                 x=asset_ordered["Reach"],
                 y=asset_ordered["Asset"],
@@ -1821,7 +1821,7 @@ def main():
 
         # ── Native Display — clicks only ────────────────────────────────────────
         if len(native_assets):
-            st.markdown(f'<div class="section-title">{_icon(_IC_CHART_BAR)}Native Display  <span style="font-size:.65rem;font-weight:500;color:#94a3b8;text-transform:none;letter-spacing:normal;">Clicks only — CTR not applicable</span></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="section-title">{_icon(_IC_TV)}Native Display  <span style="font-size:.65rem;font-weight:500;color:#94a3b8;text-transform:none;letter-spacing:normal;">Clicks only — CTR not applicable</span></div>', unsafe_allow_html=True)
             nd_ordered = native_assets.sort_values("Clicks", ascending=True)
             nd_c1, nd_c2 = st.columns(2)
             with nd_c1:
@@ -1868,7 +1868,7 @@ def main():
         c3, c4 = st.columns(2)
 
         with c3:
-            st.markdown(f'<div class="section-title">{_icon(_IC_CHART_BAR)}CTR % by Format Family  <span style="font-size:.65rem;font-weight:500;color:#94a3b8;text-transform:none;letter-spacing:normal;">Native Display excluded — clicks only</span></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="section-title">{_icon(_IC_TV)}CTR % by Format Family  <span style="font-size:.65rem;font-weight:500;color:#94a3b8;text-transform:none;letter-spacing:normal;">Native Display excluded — clicks only</span></div>', unsafe_allow_html=True)
             fmt_colors = {
                 "Programmatic Banner": BRAND["primary"],
                 "DocNews Alert":       BRAND["plum"],
@@ -1894,7 +1894,7 @@ def main():
             st.plotly_chart(fig_fmt, use_container_width=True, key="ctr_by_format")
 
         with c4:
-            st.markdown(f'<div class="section-title">{_icon(_IC_CHART_PIE)}Frequency vs CTR</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="section-title">{_icon(_IC_SIGNAL)}Frequency vs CTR</div>', unsafe_allow_html=True)
             # Click-only assets have no frequency/CTR relationship — exclude from scatter
             scatter_assets = by_asset.dropna(subset=["CTR"])
             fig_freq = go.Figure()
@@ -2056,7 +2056,7 @@ def main():
 
             with jc1:
                 st.markdown(
-                    f'<div class="section-title">{_icon(_IC_USERS)}Reach by Journey Stage'
+                    f'<div class="section-title">{_icon(_IC_MEGAPHONE)}Reach by Journey Stage'
                     '<span style="font-size:.65rem;font-weight:500;color:#94a3b8;'
                     'text-transform:none;letter-spacing:normal;margin-left:8px;">'
                     'Unique HCPs reached</span></div>',
@@ -2087,7 +2087,7 @@ def main():
 
             with jc2:
                 st.markdown(
-                    f'<div class="section-title">{_icon(_IC_ARROW_TRENDING_UP)}CTR % by Journey Stage'
+                    f'<div class="section-title">{_icon(_IC_CURSOR_RIPPLE)}CTR % by Journey Stage'
                     '<span style="font-size:.65rem;font-weight:500;color:#94a3b8;'
                     'text-transform:none;letter-spacing:normal;margin-left:8px;">'
                     'Engagement rises as HCPs advance along the journey</span></div>',
@@ -2170,7 +2170,7 @@ def main():
 
         with tree_col:
             st.markdown(
-                f'<div class="section-title">{_icon(_IC_CHART_PIE)}Specialty Reach'
+                f'<div class="section-title">{_icon(_IC_BEAKER)}Specialty Reach'
                 '<span style="font-size:.65rem;font-weight:500;color:#94a3b8;'
                 'text-transform:none;letter-spacing:normal;margin-left:8px;">'
                 'HCPs Reached by Specialty</span></div>',
@@ -2201,7 +2201,7 @@ def main():
 
         with bubble_col:
             st.markdown(
-                f'<div class="section-title">{_icon(_IC_TABLE)}Specialty Engagement'
+                f'<div class="section-title">{_icon(_IC_BEAKER)}Specialty Engagement'
                 '<span style="font-size:.65rem;font-weight:500;color:#94a3b8;'
                 'text-transform:none;letter-spacing:normal;margin-left:8px;">'
                 'Frequency vs. CTR %</span></div>',
