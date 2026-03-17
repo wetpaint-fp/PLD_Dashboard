@@ -1457,7 +1457,7 @@ def main():
                   </g>
                 </svg>
             </div>
-            <p style="font-size:.9rem;font-weight:600;color:#FC8549;text-transform:uppercase;letter-spacing:.08em;margin:6px 0 0 2px;">
+            <p style="font-size:.9rem;font-weight:600;color:#47254A;text-transform:uppercase;letter-spacing:.08em;margin:6px 0 0 2px;">
                 Revealing the True Colors of Every Brand
             </p>
             """,
@@ -1508,8 +1508,23 @@ def main():
             'Campaign Settings</div>',
             unsafe_allow_html=True,
         )
-        # Target universe drives Coverage % on the Partner Performance page.
-        # Set this to the total HCPs in your target NPI list.
+        # TARGET UNIVERSE — drives Coverage % on the Partner Performance page.
+        #
+        # PROTOTYPE (mock data): manually entered here as a sidebar input.
+        #
+        # PRODUCTION (SiS): replace this input with a Snowpark query against
+        # the NPI target list table. The target list is the universe of HCPs
+        # the campaign was designed to reach — Coverage % = Reach / Universe.
+        #
+        #   from snowflake.snowpark.context import get_active_session
+        #   session = get_active_session()
+        #   target_universe = session.sql(
+        #       "SELECT COUNT(DISTINCT NPI) FROM target_list"
+        #       " WHERE campaign_id = 'BRI_2026'"
+        #   ).collect()[0][0]
+        #
+        # When that query is in place, remove this st.number_input entirely
+        # and hide the "Campaign Settings" sidebar section.
         target_universe = st.number_input(
             "Target Universe (HCPs)",
             min_value=100,
@@ -1517,7 +1532,8 @@ def main():
             value=5_000,
             step=100,
             key="target_universe",
-            help="Total HCPs in your target NPI list. Used to calculate Coverage %.",
+            help="Total HCPs in your target NPI list. Used to calculate Coverage %. "
+                 "In production this is queried automatically from the Snowflake target list table.",
         )
 
     # ── Load data ──────────────────────────────────────────────────────────────
