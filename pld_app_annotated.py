@@ -424,12 +424,33 @@ st.markdown(
     /* Reduces the default top padding on the main content area */
     .block-container { padding-top: 1.5rem; }
 
+    /* Top bar */
+    [data-testid="stHeader"] {
+        background: #ffffff;
+    }
+
+    /* Sidebar collapse button — always visible */
+    [data-testid="stSidebarCollapseButton"] {
+        opacity: 1 !important;
+        visibility: visible !important;
+    }
+
     /* Styles the sidebar panel itself */
     [data-testid="stSidebar"] {
-        background: #ffffff;
+        background: linear-gradient(180deg, #ede8f0 0%, #ffffff 100%);
         border-right: 1px solid #e2e8f0;
     }
     [data-testid="stSidebar"] .stMarkdown h1 { font-size: 1.25rem; }
+
+    /* Sidebar section label style */
+    .sidebar-section-label {
+        font-size: .7rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: .1em;
+        color: #64748b;
+        margin: .75rem 0 .25rem 0;
+    }
 
     /* ── KPI cards ── */
     /* These are custom CSS classes we apply manually via st.markdown() calls.
@@ -686,6 +707,15 @@ def generate_mock_data() -> pd.DataFrame:
 
         is_click = random.random() < base_click_prob
 
+        # AL assets (DocNews Alert / Doximity) report headline_view / content_view,
+        # not Impression / Click. This mirrors real Doximity data behaviour.
+        if asset_id.startswith("AL"):
+            activity_type = "content_view" if is_click else "headline_view"
+        elif asset_id.startswith("NA"):
+            activity_type = "Click"   # NA = click-only (EHS Native Display)
+        else:
+            activity_type = "Click" if is_click else "Impression"
+
         rows.append({
             "ACTIVITY_ID": f"act_{i}",
             "NPI": npi_obj["id"],
@@ -694,13 +724,22 @@ def generate_mock_data() -> pd.DataFrame:
             "CHANNEL": pd_detail["CHANNEL_CATEGORY"],
             "PROGRAM": pd_detail["PROGRAM_FRIENDLY_NAME"],
             "FP_ASSET_ID": asset_id,
-            # NA assets (Native Display / EHS) are click-only — no impressions tracked.
-            # Mirrors real data behaviour: computing CTR on these would be meaningless.
-            "ACTIVITY_TYPE": "Click" if (is_click or asset_id.startswith("NA")) else "Impression",
+            "ACTIVITY_TYPE": activity_type,
             "ACTIVITY_DATE": date.strftime("%Y-%m-%d"),
             "SPECIALTY": npi_obj["specialty"],
             "STATE": npi_obj["state"],
             "Segment": segment,
+        })
+
+    # Add Conversion events — DeepIntent (DM assets) only, mirroring real data.
+    # CVR ≈ 5% of clicks → ~20 conversion events for a 4000-row dataset.
+    dm_clicks = [r for r in rows if r["FP_ASSET_ID"].startswith("DM") and r["ACTIVITY_TYPE"] == "Click"]
+    conversion_sample = random.sample(dm_clicks, min(20, len(dm_clicks)))
+    for src in conversion_sample:
+        rows.append({
+            **src,
+            "ACTIVITY_ID": f"conv_{src['ACTIVITY_ID']}",
+            "ACTIVITY_TYPE": "Conversion",
         })
 
     return pd.DataFrame(rows)
@@ -980,43 +1019,85 @@ def compute_partner_metrics(df: pd.DataFrame, vendor_filter: str):
 
     Returns a dict (not a DataFrame) because we need multiple different
     values — a dict is more readable than a tuple of 5 things.
+
+    Doximity (AL assets) reports headline_view / content_view rather than
+    Impression / Click, so we compute an EngRate column for that vendor
+    instead of a traditional CTR.
     """
-    # Filter the DataFrame if a specific vendor is selected.
-    # Otherwise use the full dataset. This pattern appears throughout.
     filt = df if vendor_filter == "All" else df[df["VENDOR"] == vendor_filter]
 
-    total_imps = len(filt)
+    # Count only true delivery events (not conversions) for impression total
+    total_imps   = int((filt["ACTIVITY_TYPE"].isin(["Impression", "headline_view", "content_view"])).sum())
     total_clicks = int((filt["ACTIVITY_TYPE"] == "Click").sum())
-    unique_npis = filt["NPI"].nunique()
-    # Frequency = average impressions per HCP. Guard against division by zero.
-    frequency = round(total_imps / unique_npis, 1) if unique_npis else 0
+    total_conversions = int((filt["ACTIVITY_TYPE"] == "Conversion").sum())
+    cvr = round(total_conversions / total_clicks * 100, 2) if total_clicks else 0.0
 
-    # groupby().agg() computes multiple metrics at once per group.
-    # The named aggregation syntax (col_name=("source_col", "agg_func"))
-    # creates clean output column names directly.
+    unique_npis = filt["NPI"].nunique()
+    frequency   = round(total_imps / unique_npis, 1) if unique_npis else 0
+
+    # Per-vendor aggregation — include Doximity engagement counts.
     by_partner = (
         filt.groupby("VENDOR")
         .agg(
             Impressions=("ACTIVITY_ID", "count"),
-            Clicks=("ACTIVITY_TYPE", lambda s: (s == "Click").sum()),
+            Clicks=("ACTIVITY_TYPE",          lambda s: (s == "Click").sum()),
+            HeadlineViews=("ACTIVITY_TYPE",   lambda s: (s == "headline_view").sum()),
+            ContentViews=("ACTIVITY_TYPE",    lambda s: (s == "content_view").sum()),
             Reach=("NPI", "nunique"),
         )
-        .reset_index()  # Moves VENDOR from index back into a regular column
+        .reset_index()
     )
-    # np.where(condition, value_if_true, value_if_false) — a vectorized if/else.
-    # Prevents division by zero when Impressions is 0.
+    # Traditional CTR for non-Doximity vendors (exclude Doximity's headline/content rows
+    # from the denominator to avoid artificially low CTR).
+    non_dox_imps = by_partner["Impressions"] - by_partner["HeadlineViews"] - by_partner["ContentViews"]
     by_partner["CTR"] = np.where(
-        by_partner["Impressions"] > 0,
-        (by_partner["Clicks"] / by_partner["Impressions"]) * 100,
-        0,
+        non_dox_imps > 0,
+        (by_partner["Clicks"] / non_dox_imps) * 100,
+        np.nan,
     )
+    # Engagement rate (content_view / headline_view) for Doximity rows only.
+    by_partner["EngRate"] = np.where(
+        by_partner["HeadlineViews"] > 0,
+        (by_partner["ContentViews"] / by_partner["HeadlineViews"]) * 100,
+        np.nan,
+    )
+
     return {
-        "total_imps": total_imps,
-        "total_clicks": total_clicks,
-        "unique_npis": unique_npis,
-        "frequency": frequency,
-        "chart": by_partner,  # DataFrame for the bar charts
+        "total_imps":         total_imps,
+        "total_clicks":       total_clicks,
+        "total_conversions":  total_conversions,
+        "cvr":                cvr,
+        "unique_npis":        unique_npis,
+        "frequency":          frequency,
+        "chart":              by_partner,
     }
+
+
+def compute_freq_distribution(df: pd.DataFrame, vendor_filter: str) -> pd.DataFrame:
+    """
+    Bucket HCPs by impression frequency into cohorts: 1×, 2–3×, 4–5×, 6×+.
+
+    Only counts Impression rows (not clicks, conversions, or Doximity
+    headline/content views) so the distribution reflects true ad exposure.
+
+    Returns a DataFrame with columns: Bucket, HCPs, Pct.
+    """
+    filt = df if vendor_filter == "All" else df[df["VENDOR"] == vendor_filter]
+    imp_filt = filt[filt["ACTIVITY_TYPE"] == "Impression"]
+    npi_counts = imp_filt.groupby("NPI").size()
+
+    buckets = {
+        "1×":   int((npi_counts == 1).sum()),
+        "2–3×": int(((npi_counts >= 2) & (npi_counts <= 3)).sum()),
+        "4–5×": int(((npi_counts >= 4) & (npi_counts <= 5)).sum()),
+        "6×+":  int((npi_counts >= 6).sum()),
+    }
+    total = sum(buckets.values()) or 1
+    return pd.DataFrame({
+        "Bucket": list(buckets.keys()),
+        "HCPs":   list(buckets.values()),
+        "Pct":    [v / total * 100 for v in buckets.values()],
+    })
 
 
 def compute_trend_data(df: pd.DataFrame, vendor_filter: str):
@@ -1385,6 +1466,7 @@ def main():
         st.markdown("---")
 
         # ── Navigation radio ──
+        st.markdown('<div class="sidebar-section-label">Pages</div>', unsafe_allow_html=True)
         active_tab = st.radio(
             "Navigation",
             ["Partner Performance", "Creative Performance", "HCP Audience"],
@@ -1396,10 +1478,12 @@ def main():
         # ── Data source toggle ──
         # Allows switching between the seeded mock dataset and the real CSVs.
         # In SiS production the real data path uses Snowpark (see load_real_data).
+        st.markdown('<div class="sidebar-section-label">Data Source</div>', unsafe_allow_html=True)
         data_source = st.radio(
             "Data Source",
             ["Mock Data", "Real Data"],
             key="data_source",
+            label_visibility="collapsed",
         )
 
         # Dynamic status badge reflects the active data source
@@ -1415,6 +1499,25 @@ def main():
             f'<div class="status-dot" style="background:{badge_color};"></div>'
             f'{badge_label}</div>',
             unsafe_allow_html=True,
+        )
+
+        st.markdown("---")
+        st.markdown(
+            '<div style="font-size:.65rem;font-weight:700;text-transform:uppercase;'
+            'letter-spacing:.08em;color:#64748b;margin-bottom:.35rem;">'
+            'Campaign Settings</div>',
+            unsafe_allow_html=True,
+        )
+        # Target universe drives Coverage % on the Partner Performance page.
+        # Set this to the total HCPs in your target NPI list.
+        target_universe = st.number_input(
+            "Target Universe (HCPs)",
+            min_value=100,
+            max_value=100_000,
+            value=5_000,
+            step=100,
+            key="target_universe",
+            help="Total HCPs in your target NPI list. Used to calculate Coverage %.",
         )
 
     # ── Load data ──────────────────────────────────────────────────────────────
@@ -1465,25 +1568,58 @@ def main():
         metrics = compute_partner_metrics(df, vendor_filter)
 
         # ── KPI Row ────────────────────────────────────────────────────────────
-        # st.columns(n) divides the available width into n equal columns and
-        # returns a list of column objects. You then use `with col:` blocks to
-        # render content inside each column.
-        #
-        # Columns are always laid out horizontally. You can nest columns inside
-        # columns for more complex layouts.
-        k1, k2, k3, k4 = st.columns(4)
+        # Coverage % = unique HCPs reached / target universe (set in sidebar).
+        coverage_pct = (metrics["unique_npis"] / target_universe * 100) if target_universe else 0
+        k1, k2, k3, k4, k5 = st.columns(5)
         with k1:
             kpi_card("Total Impressions", f"{metrics['total_imps']:,}")
         with k2:
             kpi_card("Total Clicks", f"{metrics['total_clicks']:,}")
         with k3:
-            kpi_card("Unique Reach", f"{metrics['unique_npis']:,}", "Physicians")
+            kpi_card(
+                "Conversions",
+                str(metrics["total_conversions"]),
+                f"CVR {metrics['cvr']:.2f}% of clicks",
+            )
         with k4:
+            kpi_card(
+                "Unique Reach",
+                f"{metrics['unique_npis']:,}",
+                f"{coverage_pct:.0f}% of {target_universe:,} target HCPs",
+            )
+        with k5:
             kpi_card("Avg Frequency", str(metrics["frequency"]), "Imps per NPI")
 
-        # st.markdown("") is a common way to add a small vertical gap.
-        # There's no st.spacer() in base Streamlit.
         st.markdown("")
+
+        # ── Conversion Funnel ──────────────────────────────────────────────────
+        # Three-step funnel: Impressions → Clicks → Conversions.
+        # go.Funnel shows % of initial at each stage so CTR and CVR are
+        # visible at a glance without needing separate labels.
+        st.markdown(
+            f'<div class="section-title">{_icon(_IC_FUNNEL)}Conversion Funnel</div>',
+            unsafe_allow_html=True,
+        )
+        fig_funnel = go.Figure(go.Funnel(
+            y=["Impressions", "Clicks", "Conversions"],
+            x=[metrics["total_imps"], metrics["total_clicks"], metrics["total_conversions"]],
+            textinfo="value+percent initial",
+            textfont=dict(size=13),
+            marker=dict(color=[BRAND["primary"], BRAND["accent"], BRAND["plum"]]),
+            connector=dict(line=dict(color="#e2e8f0", width=1)),
+            hovertemplate=(
+                "<b>%{label}</b><br>Count:<br>%{value:,}<br>"
+                "% of Impressions:<br>%{percentInitial:.2%}<extra></extra>"
+            ),
+        ))
+        fig_funnel.update_layout(
+            height=200,
+            margin=dict(l=20, r=20, t=10, b=10),
+            paper_bgcolor="white",
+            plot_bgcolor="white",
+        )
+        fig_funnel.update_traces(hoverlabel=PLOTLY_HOVERLABEL)
+        st.plotly_chart(fig_funnel, use_container_width=True, key="pp_funnel")
 
         # ── Monthly Trend Chart ────────────────────────────────────────────────
         trend = compute_trend_data(df, vendor_filter)
@@ -1540,48 +1676,60 @@ def main():
         fig_trend.update_traces(hoverlabel=PLOTLY_HOVERLABEL)
         st.plotly_chart(fig_trend, use_container_width=True)
 
-        # ── Side-by-side Bar Charts ────────────────────────────────────────────
-        # st.columns([1, 1]) creates two equal-width columns.
-        # You can pass a list of relative weights: [1, 2] makes the second
-        # column twice as wide as the first.
-        c1, c2 = st.columns(2)
+        # ── Three-column bar section: CTR | Reach | Frequency Distribution ───────
+        c1, c2, c3 = st.columns(3)
         chart_df = metrics["chart"]
 
         with c1:
-            st.markdown(f'<div class="section-title">{_icon(_IC_CURSOR_RIPPLE)}CTR % by Partner</div>', unsafe_allow_html=True)
-            fig_ctr = go.Figure(
-                go.Bar(
-                    x=chart_df["VENDOR"],
-                    y=chart_df["CTR"],
-                    marker_color=BRAND["accent"],
-                    marker_cornerradius=6,
-                    # text= adds value labels on each bar
-                    text=chart_df["CTR"].round(2).astype(str) + "%",
-                    textposition="outside",  # Labels float above bar tops
-                    hovertemplate="<b>%{x}</b><br>CTR:<br>%{y:.2f}%<extra></extra>",
-                )
+            # Doximity reports engagement rate (content_view / headline_view)
+            # rather than CTR (click / impression). We use whichever metric is
+            # valid per vendor so no vendor appears blank or misleading.
+            display_metric = chart_df["CTR"].where(
+                chart_df["CTR"].notna(), chart_df["EngRate"]
             )
+            has_eng_rate = chart_df["EngRate"].notna().any()
+            ctr_title_note = (
+                '<span style="font-size:.6rem;font-weight:500;color:#94a3b8;'
+                'text-transform:none;letter-spacing:normal;margin-left:6px;">'
+                '* Doximity = Engagement Rate</span>'
+                if has_eng_rate else ""
+            )
+            st.markdown(
+                f'<div class="section-title">{_icon(_IC_CURSOR_RIPPLE)}CTR % by Partner{ctr_title_note}</div>',
+                unsafe_allow_html=True,
+            )
+            bar_colors = [
+                BRAND["plum"] if not pd.isna(row["EngRate"]) else BRAND["accent"]
+                for _, row in chart_df.iterrows()
+            ]
+            fig_ctr = go.Figure(go.Bar(
+                x=chart_df["VENDOR"],
+                y=display_metric,
+                marker_color=bar_colors,
+                marker_cornerradius=6,
+                text=display_metric.round(2).astype(str) + "%",
+                textposition="outside",
+                hovertemplate="<b>%{x}</b><br>%{text}<extra></extra>",
+            ))
             fig_ctr.update_layout(
                 height=300,
                 margin=dict(l=20, r=20, t=10, b=20),
                 plot_bgcolor="white",
                 paper_bgcolor="white",
-                yaxis=dict(gridcolor="#f1f5f9", title="CTR %"),
+                yaxis=dict(gridcolor="#f1f5f9", title="CTR / Eng Rate %"),
             )
             fig_ctr.update_traces(hoverlabel=PLOTLY_HOVERLABEL)
-            st.plotly_chart(fig_ctr, use_container_width=True)
+            st.plotly_chart(fig_ctr, use_container_width=True, key="pp_ctr_partner")
 
         with c2:
             st.markdown(f'<div class="section-title">{_icon(_IC_MEGAPHONE)}Reach by Partner</div>', unsafe_allow_html=True)
-            fig_reach = go.Figure(
-                go.Bar(
-                    x=chart_df["VENDOR"],
-                    y=chart_df["Reach"],
-                    marker_color=BRAND["primary"],
-                    marker_cornerradius=6,
-                    hovertemplate="<b>%{x}</b><br>Reach:<br>%{y:,}<extra></extra>",
-                )
-            )
+            fig_reach = go.Figure(go.Bar(
+                x=chart_df["VENDOR"],
+                y=chart_df["Reach"],
+                marker_color=BRAND["primary"],
+                marker_cornerradius=6,
+                hovertemplate="<b>%{x}</b><br>Reach:<br>%{y:,}<extra></extra>",
+            ))
             fig_reach.update_layout(
                 height=300,
                 margin=dict(l=20, r=20, t=10, b=20),
@@ -1590,7 +1738,41 @@ def main():
                 yaxis=dict(gridcolor="#f1f5f9"),
             )
             fig_reach.update_traces(hoverlabel=PLOTLY_HOVERLABEL)
-            st.plotly_chart(fig_reach, use_container_width=True)
+            st.plotly_chart(fig_reach, use_container_width=True, key="pp_reach_partner")
+
+        with c3:
+            st.markdown(
+                f'<div class="section-title">{_icon(_IC_SIGNAL)}Frequency Distribution'
+                '<span style="font-size:.6rem;font-weight:500;color:#94a3b8;'
+                'text-transform:none;letter-spacing:normal;margin-left:6px;">'
+                '% of HCPs by exposure</span></div>',
+                unsafe_allow_html=True,
+            )
+            freq_dist = compute_freq_distribution(df, vendor_filter)
+            bucket_colors = [BRAND["secondary"], BRAND["primary"], BRAND["accent"], BRAND["plum"]]
+            fig_freq_dist = go.Figure(go.Bar(
+                x=freq_dist["Bucket"],
+                y=freq_dist["Pct"],
+                marker_color=bucket_colors,
+                marker_cornerradius=6,
+                text=freq_dist["Pct"].round(0).astype(int).astype(str) + "%",
+                textposition="outside",
+                customdata=freq_dist["HCPs"].values,
+                hovertemplate=(
+                    "<b>%{x}</b><br>HCPs:<br>%{customdata:,}<br>"
+                    "Share:<br>%{y:.1f}%<extra></extra>"
+                ),
+            ))
+            fig_freq_dist.update_layout(
+                height=300,
+                margin=dict(l=20, r=20, t=10, b=20),
+                plot_bgcolor="white",
+                paper_bgcolor="white",
+                yaxis=dict(gridcolor="#f1f5f9", title="% of HCPs"),
+                xaxis=dict(categoryorder="array", categoryarray=["1×", "2–3×", "4–5×", "6×+"]),
+            )
+            fig_freq_dist.update_traces(hoverlabel=PLOTLY_HOVERLABEL)
+            st.plotly_chart(fig_freq_dist, use_container_width=True, key="pp_freq_dist")
 
         # ── CTR by Stage × Partner Heatmap ────────────────────────────────────
         st.markdown(
