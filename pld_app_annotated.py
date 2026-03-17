@@ -1536,7 +1536,7 @@ def main():
     # Because the whole script reruns when active_tab changes, this
     # automatically updates without any special event handling.
     header_titles = {
-        "Partner Performance":   "Performance Overview",
+        "Partner Performance":   "Partner Performance",
         "Creative Performance":  "Creative Performance",
         "HCP Audience":          "HCP Audience",
     }
@@ -1544,7 +1544,8 @@ def main():
     st.markdown(
         f"""
         <div style="margin-bottom:.25rem;">
-            <h1 style="font-size:1.75rem;font-weight:800;color:#050607;margin:0;">{header_title}</h1>
+            <h1 style="font-size:1.75rem;font-weight:800;color:#050607;margin:0 0 .35rem 0;">{header_title}</h1>
+            <hr style="border:none;border-top:1px solid #e2e8f0;margin:0;">
         </div>
         """,
         unsafe_allow_html=True,
@@ -2332,13 +2333,32 @@ def main():
             )
             return
 
+        # ── Journey Stage filter for specialty views ───────────────────────────
+        # "Of my [Stage] HCPs, what's the specialty mix?"
+        # Filters only the specialty charts below; journey bars above are
+        # always brand-level and unaffected.
+        st.markdown(
+            f'<div class="section-title">{_icon(_IC_USERS)}Specialty Composition</div>',
+            unsafe_allow_html=True,
+        )
+        stage_options = ["All Stages"] + journey_stages
+        selected_stage = st.selectbox(
+            "Filter by Journey Stage",
+            stage_options,
+            key="spec_stage_filter",
+            help="Filter the specialty views to HCPs in a specific prescriber journey stage.",
+        )
+        spec_df_src = (
+            df if selected_stage == "All Stages"
+            else df[df["Segment"] == selected_stage]
+        )
+        stage_label = "" if selected_stage == "All Stages" else f" — {selected_stage}"
+
         # ── Specialties: Treemap + Bubble Chart ───────────────────────────────
-        # Two side-by-side views of the same specialty data.
-        # Treemap: area = reach (who we touched); no CTR to keep it a pure
-        #          volume overview. Bubble: x = avg frequency, y = CTR %,
-        #          size = reach — shows engagement vs. exposure in one view.
-        # Both use the same brand palette so colors are consistent across charts.
-        spec_geo = compute_geo_analysis(df, "specialty", "All")
+        # Treemap: area = reach (who we touched); pure volume overview.
+        # Bubble: x = avg frequency, y = CTR %, size = reach.
+        # Both filtered by the selected stage when one is chosen.
+        spec_geo = compute_geo_analysis(spec_df_src, "specialty", "All")
         spec_df = spec_geo["data"].copy()
 
         # Assign each specialty a consistent brand palette color by index
@@ -2353,9 +2373,9 @@ def main():
         with tree_col:
             st.markdown(
                 f'<div class="section-title">{_icon(_IC_BEAKER)}Specialty Reach'
-                '<span style="font-size:.65rem;font-weight:500;color:#94a3b8;'
-                'text-transform:none;letter-spacing:normal;margin-left:8px;">'
-                'HCPs Reached by Specialty</span></div>',
+                f'<span style="font-size:.65rem;font-weight:500;color:#94a3b8;'
+                f'text-transform:none;letter-spacing:normal;margin-left:8px;">'
+                f'HCPs by Specialty{stage_label}</span></div>',
                 unsafe_allow_html=True,
             )
             fig_spec_tree = go.Figure(
@@ -2384,9 +2404,9 @@ def main():
         with bubble_col:
             st.markdown(
                 f'<div class="section-title">{_icon(_IC_BEAKER)}Specialty Engagement'
-                '<span style="font-size:.65rem;font-weight:500;color:#94a3b8;'
-                'text-transform:none;letter-spacing:normal;margin-left:8px;">'
-                'Frequency vs. CTR %</span></div>',
+                f'<span style="font-size:.65rem;font-weight:500;color:#94a3b8;'
+                f'text-transform:none;letter-spacing:normal;margin-left:8px;">'
+                f'Frequency vs. CTR %{stage_label}</span></div>',
                 unsafe_allow_html=True,
             )
             # Square-root scale: perceptually correct for bubble area encoding.
