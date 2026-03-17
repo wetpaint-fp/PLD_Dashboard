@@ -16,9 +16,9 @@ uv run --with streamlit --with pandas --with plotly streamlit run pld_app_annota
 
 | View | Contents |
 |---|---|
-| **Partner Performance** | KPI cards, trend chart, reach/CTR by vendor, audience segment charts, Partner → Channel → Program drill-down table |
-| **Creative Performance** | KPI cards, CTR/reach by asset, frequency vs. CTR scatter, audience segment charts, asset detail table |
-| **Geographic Deep Dive** | Hex map by state, specialty scatter/bubble plot with highlighted comparisons |
+| **Partner Performance** | KPI cards (incl. Conversions/CVR, Coverage %), conversion funnel, monthly reach & frequency trend, CTR/reach/frequency-distribution bars, CTR % by Stage x Partner heatmap, drill-down table |
+| **Creative Performance** | KPI cards, CTR/reach by asset, frequency vs. CTR scatter, CTR % by Segment x Format heatmap, asset detail table |
+| **HCP Audience** | KPI cards (Unique HCPs, Lower Funnel %, Most Active Stage, Top Specialty), journey stage bars, hex map by state, specialty scatter/bubble with stage filter |
 
 ## Data
 
@@ -29,20 +29,19 @@ uv run --with streamlit --with pandas --with plotly streamlit run pld_app_annota
 
 See [`raw_data/DATA_DICTIONARY.md`](raw_data/DATA_DICTIONARY.md) for full schema, join logic, and KPIs.
 
-## What's Next
+## Recent Additions (v2)
 
-See [`IMPROVEMENTS.md`](IMPROVEMENTS.md) for the full backlog. Top priorities:
-- Conversion funnel (11 conversions in data are currently invisible)
-- Doximity engagement rate (`content_view / headline_view`)
-- Frequency distribution (% of HCPs at 1x / 2–3x / 4–5x / 6x+)
-- Coverage % (reach vs. target list size)
+- Conversion funnel (Impressions -> Clicks -> Conversions) with CVR KPI
+- Doximity engagement rate (`content_view / headline_view`) across all views and heatmaps
+- Frequency distribution (% of HCPs at 1x / 2-3x / 4-5x / 6x+)
+- Coverage % KPI (unique reach / target universe)
+- HCP Audience KPI row and journey stage filter for specialty views
+- Inline Heroicons for all section headers (SiS-compatible, no external HTTP)
 
 ## Production Deployment
 
-The app targets Snowflake's GitHub integration for deployment. Swap mock data generation for a Snowpark session query:
-
-```python
-from snowflake.snowpark.context import get_active_session
-session = get_active_session()
-df = session.sql("SELECT * FROM app_data").to_pandas()
-```
+See [`SNOWFLAKE_DEPLOYMENT.md`](SNOWFLAKE_DEPLOYMENT.md) for the full guide covering:
+- Expected Snowflake tables (`APP_DATA`, `BRI_LOOKUP`, `HCP_DIM`, `TARGET_LIST`)
+- Snowpark connection pattern (drop-in replacement for mock data)
+- Column name mappings and join logic
+- Feature availability matrix by data source

@@ -26,10 +26,11 @@ Everything lives in `pld_app_annotated.py`. Key sections:
 - **Mock data generation** (`generate_mock_data`): Seeded random data (500 NPIs, 4000 activity rows). Cached with `@st.cache_data`. Will be replaced by Snowpark SQL queries in production. Segments use real BRI_LOOKUP taxonomy with weighted distribution.
 - **Analytics functions**: Pure DataFrame computations — `compute_partner_metrics`, `compute_trend_data`, `compute_hierarchy`, `compute_geo_analysis`, `compute_creative_metrics`, `compute_segment_metrics`, `compute_segment_by_format`.
 - **Hex map** (`US_HEX_MAP`, `build_hex_map_figure`): Custom pointy-top hexagonal US state grid via Plotly `go.Scatter`. Not a choropleth — each state is a manually placed hex.
+- **`compute_freq_distribution`**: Buckets HCPs by impression frequency (1×, 2–3×, 4–5×, 6×+).
 - **Three views** (sidebar radio):
-  - **Partner Performance**: KPI cards → trend chart → CTR/reach bars by vendor → CTR % by Stage × Partner heatmap → hierarchical drill-down (Partner → Channel → Program)
+  - **Partner Performance**: KPI cards (incl. Conversions/CVR, Coverage %) → conversion funnel (Impressions → Clicks → Conversions) → monthly reach & frequency trend → CTR/reach/frequency-distribution bars → CTR % by Stage × Partner heatmap → hierarchical drill-down (Partner → Channel → Program)
   - **Creative Performance**: KPI cards → CTR/reach by asset → frequency vs. CTR scatter → CTR % by Segment × Format heatmap → asset detail table
-  - **HCP Audience**: Reach by Journey Stage bar + CTR by Journey Stage bar → state hex map or specialty scatter/bubble plot with `st.session_state.highlighted` comparisons
+  - **HCP Audience**: KPI cards (Unique HCPs, Lower Funnel %, Most Active Stage, Top Specialty) → Reach by Journey Stage bar + CTR by Journey Stage bar → state hex map or specialty scatter/bubble plot (filterable by journey stage) with `st.session_state.highlighted` comparisons
 
 ## Segment Taxonomy
 
@@ -47,7 +48,9 @@ The first 6 are prescriber journey stages (used in HCP Audience page journey cha
 ## Color Conventions
 
 - **Reach** → `BRAND["primary"]` (`#47254A`, dark purple)
-- **CTR** → `BRAND["accent"]` (`#FC8549`, orange)
+- **CTR** → `BRAND["accent"]` (`#FC8549`, orange) — all CTR bars are orange
+- **Conversion funnel** → light-to-dark purple gradient: `#BFA8D1` → `#8A5CA8` → `#47254A`
+- **Frequency distribution** → flat light purple `#BFA8D1`
 - **Format families** (Creative page stacked chart) → Programmatic Banner = primary, DocNews Alert = plum (`#880068`), Native Display = secondary (`#BFA8D1`)
 - **Heatmaps** → colorscale light→dark purple: `[[0, "#E8DEEE"], [0.5, "#8A5CA8"], [1, "#47254A"]]`; `zmin`/`zmax` pinned to global range so filters don't reset the scale
 - Fingerpaint Marketing SVG logo is embedded inline in the sidebar (no external HTTP — required for SiS)
@@ -78,18 +81,18 @@ See [`raw_data/DATA_DICTIONARY.md`](raw_data/DATA_DICTIONARY.md) for full schema
 
 **Critical data behavior:**
 - Activity types differ by vendor — Doximity has no impressions (only `headline_view`/`content_view`), EHS has clicks only. Never compute CTR across all vendors together.
+- **Doximity engagement rate** = `content_view / headline_view`. Used everywhere CTR would be: bar charts, heatmaps, creative metrics. Doximity cells in heatmaps use engagement rate, not 0% CTR.
+- CTR bar chart on Partner Performance **excludes** vendors with null, 0%, or 100% CTR (footnote shown below chart).
 - `ACTIVITY_TYPE` and `VENDOR` contain dirty values with extraneous quotes — strip on load.
 - 98.8% of rows join to BRI_LOOKUP; 1.2% (Doximity AL010-A Wave Six) will be null on BRI columns.
 
-## Snowflake / SiS Production Pattern
+## Snowflake / SiS Production Deployment
 
-```python
-from snowflake.snowpark.context import get_active_session
-session = get_active_session()
-df = session.sql("SELECT * FROM app_data").to_pandas()
-```
-
-Swap mock data generation for the above when deploying to SiS. No other changes needed for a basic table viewer.
+See [`SNOWFLAKE_DEPLOYMENT.md`](SNOWFLAKE_DEPLOYMENT.md) for the full deployment guide, including:
+- Expected table schemas (`APP_DATA`, `BRI_LOOKUP`, `HCP_DIM`, `TARGET_LIST`)
+- Snowpark connection pattern (drop-in `load_data()` function)
+- Column name mappings (CSV → Snowflake → app)
+- Feature availability matrix by data source
 
 ## Charting
 
