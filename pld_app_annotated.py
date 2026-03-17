@@ -1319,19 +1319,25 @@ def compute_segment_by_format(df: pd.DataFrame) -> pd.DataFrame:
         .agg(Reach=("NPI", "nunique"))
         .reset_index()
     )
-    # CTR from impression-trackable rows only (DM + AL)
+    # CTR/EngRate from impression-trackable rows only (DM + AL)
+    # DocNews Alert (AL) uses engagement rate: content_view / headline_view
     ctr_agg = (
         filt_ctr.groupby(["Segment", "Format"])
         .agg(
-            Impressions=("ACTIVITY_ID", "count"),
-            Clicks=("ACTIVITY_TYPE", lambda s: (s == "Click").sum()),
+            Impressions=("ACTIVITY_TYPE",   lambda s: (s == "Impression").sum()),
+            Clicks=("ACTIVITY_TYPE",        lambda s: (s == "Click").sum()),
+            HeadlineViews=("ACTIVITY_TYPE", lambda s: (s == "headline_view").sum()),
+            ContentViews=("ACTIVITY_TYPE",  lambda s: (s == "content_view").sum()),
         )
         .reset_index()
     )
+    is_dox = ctr_agg["Format"] == "DocNews Alert"
     ctr_agg["CTR"] = np.where(
-        ctr_agg["Impressions"] > 0,
-        ctr_agg["Clicks"] / ctr_agg["Impressions"] * 100,
-        np.nan,
+        is_dox,
+        np.where(ctr_agg["HeadlineViews"] > 0,
+                 ctr_agg["ContentViews"] / ctr_agg["HeadlineViews"] * 100, np.nan),
+        np.where(ctr_agg["Impressions"] > 0,
+                 ctr_agg["Clicks"] / ctr_agg["Impressions"] * 100, np.nan),
     )
     agg = reach_agg.merge(ctr_agg[["Segment", "Format", "Impressions", "Clicks", "CTR"]],
                           on=["Segment", "Format"], how="left")
@@ -1366,24 +1372,29 @@ def compute_creative_metrics(df: pd.DataFrame) -> dict:
     by_asset = (
         filt.groupby("FP_ASSET_ID")
         .agg(
-            Impressions=("ACTIVITY_ID",  "count"),
-            Clicks=("ACTIVITY_TYPE",     lambda s: (s == "Click").sum()),
-            Reach=("NPI",                "nunique"),
-            Format=("Format",            "first"),
+            Impressions=("ACTIVITY_TYPE", lambda s: (s == "Impression").sum()),
+            Clicks=("ACTIVITY_TYPE",      lambda s: (s == "Click").sum()),
+            HeadlineViews=("ACTIVITY_TYPE", lambda s: (s == "headline_view").sum()),
+            ContentViews=("ACTIVITY_TYPE",  lambda s: (s == "content_view").sum()),
+            Reach=("NPI",                 "nunique"),
+            Format=("Format",             "first"),
         )
         .reset_index()
         .rename(columns={"FP_ASSET_ID": "Asset"})
     )
-    # Click-only assets (NA prefix = Native Display / EHS) have no impression rows.
-    # CTR is undefined for these — set to NaN so the UI can display "N/A" clearly.
+    # NA (Native Display/EHS) = click-only, CTR undefined.
+    # AL (DocNews Alert/Doximity) = engagement rate (content_view / headline_view).
+    # DM (Programmatic Banner) = standard CTR (clicks / impressions).
     click_only = by_asset["Asset"].str.startswith("NA")
+    doximity   = by_asset["Asset"].str.startswith("AL")
     by_asset["CTR"] = np.where(
-        click_only,
-        np.nan,
+        click_only, np.nan,
         np.where(
-            by_asset["Impressions"] > 0,
-            (by_asset["Clicks"] / by_asset["Impressions"]) * 100,
-            np.nan,
+            doximity,
+            np.where(by_asset["HeadlineViews"] > 0,
+                     by_asset["ContentViews"] / by_asset["HeadlineViews"] * 100, np.nan),
+            np.where(by_asset["Impressions"] > 0,
+                     by_asset["Clicks"] / by_asset["Impressions"] * 100, np.nan),
         ),
     )
     by_asset["AvgFreq"] = np.where(
@@ -1401,20 +1412,23 @@ def compute_creative_metrics(df: pd.DataFrame) -> dict:
     by_format = (
         filt.groupby("Format")
         .agg(
-            Impressions=("ACTIVITY_ID", "count"),
-            Clicks=("ACTIVITY_TYPE",    lambda s: (s == "Click").sum()),
-            Reach=("NPI",               "nunique"),
+            Impressions=("ACTIVITY_TYPE", lambda s: (s == "Impression").sum()),
+            Clicks=("ACTIVITY_TYPE",      lambda s: (s == "Click").sum()),
+            HeadlineViews=("ACTIVITY_TYPE", lambda s: (s == "headline_view").sum()),
+            ContentViews=("ACTIVITY_TYPE",  lambda s: (s == "content_view").sum()),
+            Reach=("NPI",                 "nunique"),
         )
         .reset_index()
     )
-    # Native Display row will have Impressions == Clicks (click-only) — mark as NaN
+    # Native Display = click-only (NaN). DocNews Alert = engagement rate. Banner = CTR.
     by_format["CTR"] = np.where(
-        by_format["Format"] == "Native Display",
-        np.nan,
+        by_format["Format"] == "Native Display", np.nan,
         np.where(
-            by_format["Impressions"] > 0,
-            (by_format["Clicks"] / by_format["Impressions"]) * 100,
-            np.nan,
+            by_format["Format"] == "DocNews Alert",
+            np.where(by_format["HeadlineViews"] > 0,
+                     by_format["ContentViews"] / by_format["HeadlineViews"] * 100, np.nan),
+            np.where(by_format["Impressions"] > 0,
+                     by_format["Clicks"] / by_format["Impressions"] * 100, np.nan),
         ),
     )
 
@@ -1560,8 +1574,7 @@ def main():
     st.markdown(
         f"""
         <div style="margin-bottom:.25rem;">
-            <h1 style="font-size:1.75rem;font-weight:800;color:#050607;margin:0 0 .35rem 0;">{header_title}</h1>
-            <hr style="border:none;border-top:1px solid #e2e8f0;margin:0;">
+            <h1 style="font-size:1.75rem;font-weight:800;color:#050607;margin:0;">{header_title}</h1>
         </div>
         """,
         unsafe_allow_html=True,
@@ -1622,11 +1635,11 @@ def main():
             x=[metrics["total_imps"], metrics["total_clicks"], metrics["total_conversions"]],
             textinfo="value+percent initial",
             textfont=dict(size=13),
-            marker=dict(color=[BRAND["primary"], BRAND["accent"], BRAND["plum"]]),
+            marker=dict(color=["#BFA8D1", "#8A5CA8", BRAND["primary"]]),
             connector=dict(line=dict(color="#e2e8f0", width=1)),
             hovertemplate=(
-                "<b>%{label}</b><br>Count:<br>%{value:,}<br>"
-                "% of Impressions:<br>%{percentInitial:.2%}<extra></extra>"
+                "<b>%{y}</b><br>Count:<br>%{x:,}<br>"
+                "% of Initial:<br>%{percentInitial:.1%}<extra></extra>"
             ),
         ))
         fig_funnel.update_layout(
@@ -1668,9 +1681,12 @@ def main():
                 x=trend["MONTH"],
                 y=trend["Frequency"],
                 name="Avg Frequency",
-                mode="lines+markers",  # Draw both line and dot markers
+                mode="lines+markers+text",
                 line=dict(color=BRAND["accent"], width=3),
                 marker=dict(size=7),
+                text=trend["Frequency"].round(1).astype(str),
+                textposition="top center",
+                textfont=dict(size=11, color=BRAND["accent"]),
                 hovertemplate="<b>%{x}</b><br>Avg Frequency:<br>%{y:.1f}<extra></extra>",
             ),
             secondary_y=True,   # → right axis
@@ -1684,7 +1700,7 @@ def main():
             plot_bgcolor="white",
             paper_bgcolor="white",
             yaxis=dict(gridcolor="#f1f5f9"),
-            yaxis2=dict(gridcolor="#f1f5f9"),
+            yaxis2=dict(gridcolor="#f1f5f9", rangemode="tozero", range=[0, trend["Frequency"].max() * 1.3]),
         )
 
         # st.plotly_chart() renders the Plotly figure.
@@ -1704,27 +1720,21 @@ def main():
             display_metric = chart_df["CTR"].where(
                 chart_df["CTR"].notna(), chart_df["EngRate"]
             )
-            has_eng_rate = chart_df["EngRate"].notna().any()
-            ctr_title_note = (
-                '<span style="font-size:.6rem;font-weight:500;color:#94a3b8;'
-                'text-transform:none;letter-spacing:normal;margin-left:6px;">'
-                '* Doximity = Engagement Rate</span>'
-                if has_eng_rate else ""
-            )
+            # Exclude vendors with null, 0%, or 100% CTR — not meaningful for comparison
+            valid_mask = display_metric.notna() & (display_metric > 0) & (display_metric < 100)
+            excluded_vendors = chart_df.loc[~valid_mask, "VENDOR"].tolist()
+            ctr_chart_df = chart_df[valid_mask].copy()
+            ctr_display = display_metric[valid_mask]
             st.markdown(
-                f'<div class="section-title">{_icon(_IC_CURSOR_RIPPLE)}CTR % by Partner{ctr_title_note}</div>',
+                f'<div class="section-title">{_icon(_IC_CURSOR_RIPPLE)}CTR % by Partner</div>',
                 unsafe_allow_html=True,
             )
-            bar_colors = [
-                BRAND["plum"] if not pd.isna(row["EngRate"]) else BRAND["accent"]
-                for _, row in chart_df.iterrows()
-            ]
             fig_ctr = go.Figure(go.Bar(
-                x=chart_df["VENDOR"],
-                y=display_metric,
-                marker_color=bar_colors,
+                x=ctr_chart_df["VENDOR"],
+                y=ctr_display,
+                marker_color=BRAND["accent"],
                 marker_cornerradius=6,
-                text=display_metric.round(2).astype(str) + "%",
+                text=ctr_display.round(2).astype(str) + "%",
                 textposition="outside",
                 hovertemplate="<b>%{x}</b><br>%{text}<extra></extra>",
             ))
@@ -1737,6 +1747,18 @@ def main():
             )
             fig_ctr.update_traces(hoverlabel=PLOTLY_HOVERLABEL)
             st.plotly_chart(fig_ctr, use_container_width=True, key="pp_ctr_partner")
+            footnotes = []
+            if ctr_chart_df["EngRate"].notna().any():
+                footnotes.append("* Doximity = Engagement Rate")
+            if excluded_vendors:
+                footnotes.append(f'Excludes {", ".join(excluded_vendors)} (null, 0%, or 100% CTR)')
+            if footnotes:
+                st.markdown(
+                    '<div style="font-size:.6rem;color:#94a3b8;margin-top:-12px;">'
+                    + "<br>".join(footnotes)
+                    + "</div>",
+                    unsafe_allow_html=True,
+                )
 
         with c2:
             st.markdown(f'<div class="section-title">{_icon(_IC_MEGAPHONE)}Reach by Partner</div>', unsafe_allow_html=True)
@@ -1766,7 +1788,7 @@ def main():
                 unsafe_allow_html=True,
             )
             freq_dist = compute_freq_distribution(df, vendor_filter)
-            bucket_colors = [BRAND["secondary"], BRAND["primary"], BRAND["accent"], BRAND["plum"]]
+            bucket_colors = ["#BFA8D1", "#BFA8D1", "#BFA8D1", "#BFA8D1"]
             fig_freq_dist = go.Figure(go.Bar(
                 x=freq_dist["Bucket"],
                 y=freq_dist["Pct"],
@@ -1803,36 +1825,38 @@ def main():
         filt_seg = filt_seg[filt_seg["Segment"].notna() & (filt_seg["Segment"] != "Unknown")]
         # Exclude click-only (NA) assets — no impressions means CTR would be 100%.
         filt_seg = filt_seg[~filt_seg["FP_ASSET_ID"].str.startswith("NA", na=False)]
-        sv_agg = (
-            filt_seg.groupby(["Segment", "VENDOR"])
-            .agg(
-                Impressions=("ACTIVITY_ID", "count"),
-                Clicks=("ACTIVITY_TYPE", lambda s: (s == "Click").sum()),
+        def _sv_agg_with_metric(src: pd.DataFrame) -> pd.DataFrame:
+            """Aggregate CTR or Engagement Rate per Segment × Vendor.
+
+            Doximity has no Impression/Click rows — it uses headline_view /
+            content_view.  Using a straight Click/row-count formula gives 0%
+            for every Doximity cell.  Instead we compute whichever metric is
+            valid for each vendor and store it in a single 'CTR' column so the
+            heatmap stays meaningful across all partners.
+            """
+            agg = (
+                src.groupby(["Segment", "VENDOR"])
+                .agg(
+                    HeadlineViews=("ACTIVITY_TYPE", lambda s: (s == "headline_view").sum()),
+                    ContentViews=("ACTIVITY_TYPE", lambda s: (s == "content_view").sum()),
+                    Impressions=("ACTIVITY_TYPE", lambda s: (s == "Impression").sum()),
+                    Clicks=("ACTIVITY_TYPE", lambda s: (s == "Click").sum()),
+                )
+                .reset_index()
             )
-            .reset_index()
-        )
-        sv_agg["CTR"] = np.where(
-            sv_agg["Impressions"] > 0,
-            sv_agg["Clicks"] / sv_agg["Impressions"] * 100,
-            np.nan,
-        )
-        # Compute global CTR range from unfiltered data so the color scale
-        # stays anchored when a vendor filter is applied.
+            # Doximity: engagement rate = content_view / headline_view
+            is_dox = agg["HeadlineViews"] > 0
+            eng_rate = np.where(is_dox, agg["ContentViews"] / agg["HeadlineViews"] * 100, np.nan)
+            ctr      = np.where(agg["Impressions"] > 0, agg["Clicks"] / agg["Impressions"] * 100, np.nan)
+            agg["CTR"] = np.where(is_dox, eng_rate, ctr)
+            return agg
+
+        sv_agg = _sv_agg_with_metric(filt_seg)
+        # Compute global range from unfiltered data so color scale stays
+        # anchored when a vendor filter is applied.
         _global_seg = df[df["Segment"].notna() & (df["Segment"] != "Unknown")]
         _global_seg = _global_seg[~_global_seg["FP_ASSET_ID"].str.startswith("NA", na=False)]
-        _global_sv_agg = (
-            _global_seg.groupby(["Segment", "VENDOR"])
-            .agg(
-                Impressions=("ACTIVITY_ID", "count"),
-                Clicks=("ACTIVITY_TYPE", lambda s: (s == "Click").sum()),
-            )
-            .reset_index()
-        )
-        _global_sv_agg["CTR"] = np.where(
-            _global_sv_agg["Impressions"] > 0,
-            _global_sv_agg["Clicks"] / _global_sv_agg["Impressions"] * 100,
-            np.nan,
-        )
+        _global_sv_agg = _sv_agg_with_metric(_global_seg)
         _sv_zmin = float(_global_sv_agg["CTR"].min(skipna=True))
         _sv_zmax = float(_global_sv_agg["CTR"].max(skipna=True))
         if len(sv_agg):
@@ -1860,7 +1884,7 @@ def main():
                 colorbar=dict(title="CTR %", thickness=12, len=0.7),
             ))
             fig_sv.update_layout(
-                height=max(300, len(row_order) * 48 + 60),
+                height=max(200, len(row_order) * 32 + 40),
                 margin=dict(l=20, r=20, t=10, b=20),
                 plot_bgcolor="white",
                 paper_bgcolor="white",
@@ -2190,7 +2214,7 @@ def main():
                 colorbar=dict(title="CTR %", thickness=12, len=0.7),
             ))
             fig_cp_heat.update_layout(
-                height=max(300, len(row_order) * 48 + 60),
+                height=max(200, len(row_order) * 32 + 40),
                 margin=dict(l=20, r=20, t=10, b=20),
                 plot_bgcolor="white",
                 paper_bgcolor="white",
@@ -2325,7 +2349,7 @@ def main():
                     hovertemplate="<b>%{y}</b><br>HCPs reached:<br>%{x:,}<extra></extra>",
                 ))
                 fig_seg_bar.update_layout(
-                    height=360,
+                    height=320,
                     margin=dict(l=20, r=60, t=10, b=20),
                     plot_bgcolor="white",
                     paper_bgcolor="white",
@@ -2378,7 +2402,7 @@ def main():
                     hovertemplate="<b>%{y}</b><br>CTR:<br>%{x:.2f}%<extra></extra>",
                 ))
                 fig_ctr_stage.update_layout(
-                    height=360,
+                    height=320,
                     margin=dict(l=20, r=60, t=10, b=20),
                     plot_bgcolor="white",
                     paper_bgcolor="white",
