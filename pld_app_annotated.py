@@ -71,6 +71,22 @@ BRAND = {
     "palette":   ["#FC8549", "#47254A", "#880068", "#FF76BA", "#C2521B", "#556979"],
 }
 
+# Prescriber journey funnel order, derived from the BRI_LOOKUP "Segment" column.
+# Segments are sub-groups of the HCP Target List, ordered from coldest audience
+# (never heard of Brixadi) to hottest (active champion / brand advocate).
+# Deciles Ai is a separate ML-scored priority tier; Site Visitors is a
+# retargeting pool independent of the journey stages.
+SEGMENT_FUNNEL_ORDER = [
+    "Unaware",
+    "Educate",
+    "Aware",
+    "Trialing",
+    "Adopting",
+    "Advocating",
+    "Deciles Ai",
+    "Site Visitors",
+]
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # CUSTOM CSS
@@ -284,24 +300,38 @@ def generate_mock_data() -> pd.DataFrame:
             "state": random.choice(states),
         })
 
-    # Audience segments mirror the BRI_LOOKUP "Segment" column in real data.
-    # Assigning segment at the placement level is realistic: in production,
-    # segment comes from BRI_LOOKUP (keyed by placement slug), not per-event.
-    segments = [
-        "Claims-Based Prescribers", "HCP Target List", "Site Retargeting",
-        "Specialty Targeting", "Lookalike Audience", "Conquesting",
-        "High Value HCPs", "Geographic Targeting",
-    ]
-    # Per-segment CTR modifier — site retargeting and high-value lists convert best
+    # Audience segments match the BRI_LOOKUP "Segment" column from the real data.
+    # In BRI_LOOKUP, all active segments are sub-groups of HCP-Target-List targeting
+    # except "Site Visitors" (Site-Retargeting). The journey stages reflect where
+    # each HCP sits in their prescribing adoption of Brixadi.
+    #
+    # Weights mirror the real campaign: Aware/Trialing/Adopting get the most budget;
+    # Advocating is a small but high-value group; Site Visitors is a small retargeting pool.
+    seg_weights = {
+        "Unaware":       0.06,
+        "Educate":       0.10,
+        "Aware":         0.22,
+        "Trialing":      0.20,
+        "Adopting":      0.16,
+        "Advocating":    0.08,
+        "Deciles Ai":    0.13,
+        "Site Visitors": 0.05,
+    }
+    segments    = list(seg_weights.keys())
+    seg_probs   = list(seg_weights.values())
+
+    # CTR biases reflect real-world HCP engagement: HCPs further down the prescribing
+    # journey (Adopting, Advocating) are more likely to engage; cold audiences (Unaware)
+    # click less. Site Visitors are high-intent retargeting targets.
     segment_ctr_bias = {
-        "Claims-Based Prescribers":  0.04,
-        "HCP Target List":           0.02,
-        "Site Retargeting":          0.06,
-        "Specialty Targeting":       0.00,
-        "Lookalike Audience":       -0.01,
-        "Conquesting":              -0.02,
-        "High Value HCPs":           0.03,
-        "Geographic Targeting":      0.00,
+        "Unaware":       -0.03,
+        "Educate":       -0.01,
+        "Aware":          0.00,
+        "Trialing":       0.03,
+        "Adopting":       0.05,
+        "Advocating":     0.07,
+        "Deciles Ai":     0.04,
+        "Site Visitors":  0.06,
     }
 
     # Build 50 fake placement definitions (maps placement name → partner/channel/program/asset/segment)
@@ -314,7 +344,7 @@ def generate_mock_data() -> pd.DataFrame:
             "CHANNEL_CATEGORY": random.choice(channels),
             "PROGRAM_FRIENDLY_NAME": random.choice(programs),
             "FP_ASSET_ID": random.choice(asset_map[partner]),
-            "Segment": random.choice(segments),
+            "Segment": np.random.choice(segments, p=seg_probs),
         }
 
     # Generate 4000 activity events (one row = one ad served to one HCP)
@@ -821,8 +851,9 @@ def compute_segment_metrics(df: pd.DataFrame, vendor_filter: str) -> pd.DataFram
     Compute CTR, reach, and impressions per audience segment.
 
     Segments come from BRI_LOOKUP in real data (via the "Segment" column) or
-    from placement metadata in mock data. One row per segment, sorted by CTR
-    descending so the best-performing segment is always first.
+    from placement metadata in mock data. One row per segment, ordered by
+    SEGMENT_FUNNEL_ORDER (prescriber journey stage) so charts always read
+    Unaware → Educate → Aware → Trialing → Adopting → Advocating.
 
     Note: click-only vendors (NA assets) inflate impression counts here.
     For a production view, filter to impression-trackable vendors first.
@@ -844,20 +875,32 @@ def compute_segment_metrics(df: pd.DataFrame, vendor_filter: str) -> pd.DataFram
         (agg["Clicks"] / agg["Impressions"]) * 100,
         0,
     )
-    return agg.sort_values("CTR", ascending=False).reset_index(drop=True)
+    # Sort by prescriber journey stage; any unrecognised segment goes at the end
+    funnel_pos = {s: i for i, s in enumerate(SEGMENT_FUNNEL_ORDER)}
+    agg["_order"] = agg["Segment"].map(funnel_pos).fillna(999)
+    return agg.sort_values("_order").drop(columns="_order").reset_index(drop=True)
 
 
-def compute_segment_reach_by_format(df: pd.DataFrame) -> pd.DataFrame:
+def compute_segment_by_format(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Compute unique HCP reach per Segment × Format family for the stacked bar
-    on the Creative Performance page.
+    Compute CTR (or engagement rate) and reach per Segment × Format family for
+    the Creative Performance heatmap.
 
-    Format is derived from FP_ASSET_ID prefix (same logic as compute_creative_metrics):
-      DM### → Programmatic Banner
-      NA### → Native Display
-      AL### → DocNews Alert
+    Format is derived from FP_ASSET_ID prefix:
+      DM### → Programmatic Banner  (impressions + clicks  → CTR = clicks / impressions)
+      AL### → DocNews Alert        (mock: click/impression → CTR = clicks / impressions)
+                                   (real: headline_view / content_view → engagement rate)
+      NA### → Native Display       (click-only, no impressions → CTR = NaN)
+
+    In production the DocNews Alert column label should read "Engagement Rate"
+    since Doximity reports content_view ÷ headline_view, not a traditional CTR.
+
+    Sorted by SEGMENT_FUNNEL_ORDER so heatmap rows always read journey-stage order.
     """
     filt = df[df["Segment"].notna() & (df["Segment"] != "Unknown")].copy()
+    # Exclude NA (Native Display) rows from CTR computation — they are click-only
+    # and have no impressions, so any CTR would be artificially 100%.
+    filt_ctr = filt[~filt["FP_ASSET_ID"].str.startswith("NA", na=False)].copy()
 
     def _fmt(asset_id):
         if pd.isna(asset_id):
@@ -871,14 +914,34 @@ def compute_segment_reach_by_format(df: pd.DataFrame) -> pd.DataFrame:
             return "DocNews Alert"
         return "Other"
 
-    filt["Format"] = filt["FP_ASSET_ID"].apply(_fmt)
+    filt["Format"]     = filt["FP_ASSET_ID"].apply(_fmt)
+    filt_ctr["Format"] = filt_ctr["FP_ASSET_ID"].apply(_fmt)
 
-    agg = (
+    # Reach from all rows (including Native Display)
+    reach_agg = (
         filt.groupby(["Segment", "Format"])
         .agg(Reach=("NPI", "nunique"))
         .reset_index()
     )
-    return agg
+    # CTR from impression-trackable rows only (DM + AL)
+    ctr_agg = (
+        filt_ctr.groupby(["Segment", "Format"])
+        .agg(
+            Impressions=("ACTIVITY_ID", "count"),
+            Clicks=("ACTIVITY_TYPE", lambda s: (s == "Click").sum()),
+        )
+        .reset_index()
+    )
+    ctr_agg["CTR"] = np.where(
+        ctr_agg["Impressions"] > 0,
+        ctr_agg["Clicks"] / ctr_agg["Impressions"] * 100,
+        np.nan,
+    )
+    agg = reach_agg.merge(ctr_agg[["Segment", "Format", "Impressions", "Clicks", "CTR"]],
+                          on=["Segment", "Format"], how="left")
+    funnel_pos = {s: i for i, s in enumerate(SEGMENT_FUNNEL_ORDER)}
+    agg["_order"] = agg["Segment"].map(funnel_pos).fillna(999)
+    return agg.sort_values("_order").drop(columns="_order").reset_index(drop=True)
 
 
 def compute_creative_metrics(df: pd.DataFrame) -> dict:
@@ -1006,7 +1069,7 @@ def main():
         # ── Navigation radio ──
         active_tab = st.radio(
             "Navigation",
-            ["Partner Performance", "Creative Performance", "Geographic Deep Dive"],
+            ["Partner Performance", "Creative Performance", "HCP Audience"],
             label_visibility="collapsed",
         )
 
@@ -1054,7 +1117,7 @@ def main():
     header_titles = {
         "Partner Performance":   "Performance Overview",
         "Creative Performance":  "Creative Performance",
-        "Geographic Deep Dive":  "Geographic Analysis",
+        "HCP Audience":          "HCP Audience",
     }
     header_title = header_titles.get(active_tab, active_tab)
     st.markdown(
@@ -1207,54 +1270,59 @@ def main():
             )
             st.plotly_chart(fig_reach, use_container_width=True)
 
-        # ── Audience Segment Performance ───────────────────────────────────────
+        # ── CTR by Stage × Partner Heatmap ────────────────────────────────────
         st.markdown(
-            '<div class="section-title">🎯  Performance by Audience Segment</div>',
+            '<div class="section-title">🎯  CTR % by Stage × Partner'
+            '<span style="font-size:.65rem;font-weight:500;color:#94a3b8;'
+            'text-transform:none;letter-spacing:normal;margin-left:8px;">'
+            'Darker = higher CTR</span></div>',
             unsafe_allow_html=True,
         )
-        seg_df = compute_segment_metrics(df, vendor_filter)
-        if len(seg_df):
-            seg_ordered = seg_df.sort_values("CTR", ascending=True)  # Ascending for horizontal bar (highest ends up on top)
-            seg_h = max(280, len(seg_ordered) * 40)
-
-            sc1, sc2 = st.columns(2)
-            with sc1:
-                st.markdown('<div class="section-title" style="font-size:.8rem;">CTR % by Segment</div>', unsafe_allow_html=True)
-                fig_seg_ctr = go.Figure(go.Bar(
-                    x=seg_ordered["CTR"],
-                    y=seg_ordered["Segment"],
-                    orientation="h",
-                    marker_color=BRAND["accent"],
-                    marker_cornerradius=4,
-                    text=seg_ordered["CTR"].round(2).astype(str) + "%",
-                    textposition="outside",
-                ))
-                fig_seg_ctr.update_layout(
-                    height=seg_h,
-                    margin=dict(l=20, r=60, t=10, b=20),
-                    plot_bgcolor="white", paper_bgcolor="white",
-                    xaxis=dict(gridcolor="#f1f5f9", title="CTR %"),
-                    yaxis=dict(tickfont=dict(size=11)),
-                )
-                st.plotly_chart(fig_seg_ctr, use_container_width=True, key="pp_seg_ctr")
-
-            with sc2:
-                st.markdown('<div class="section-title" style="font-size:.8rem;">Reach by Segment</div>', unsafe_allow_html=True)
-                fig_seg_reach = go.Figure(go.Bar(
-                    x=seg_ordered["Reach"],
-                    y=seg_ordered["Segment"],
-                    orientation="h",
-                    marker_color=BRAND["primary"],
-                    marker_cornerradius=4,
-                ))
-                fig_seg_reach.update_layout(
-                    height=seg_h,
-                    margin=dict(l=20, r=20, t=10, b=20),
-                    plot_bgcolor="white", paper_bgcolor="white",
-                    xaxis=dict(gridcolor="#f1f5f9", title="Unique HCPs"),
-                    yaxis=dict(tickfont=dict(size=11)),
-                )
-                st.plotly_chart(fig_seg_reach, use_container_width=True, key="pp_seg_reach")
+        filt_seg = df if vendor_filter == "All" else df[df["VENDOR"] == vendor_filter]
+        filt_seg = filt_seg[filt_seg["Segment"].notna() & (filt_seg["Segment"] != "Unknown")]
+        # Exclude click-only (NA) assets — no impressions means CTR would be 100%.
+        filt_seg = filt_seg[~filt_seg["FP_ASSET_ID"].str.startswith("NA", na=False)]
+        sv_agg = (
+            filt_seg.groupby(["Segment", "VENDOR"])
+            .agg(
+                Impressions=("ACTIVITY_ID", "count"),
+                Clicks=("ACTIVITY_TYPE", lambda s: (s == "Click").sum()),
+            )
+            .reset_index()
+        )
+        sv_agg["CTR"] = np.where(
+            sv_agg["Impressions"] > 0,
+            sv_agg["Clicks"] / sv_agg["Impressions"] * 100,
+            np.nan,
+        )
+        if len(sv_agg):
+            pivot_sv  = sv_agg.pivot(index="Segment", columns="VENDOR", values="CTR")
+            funnel_pos = {s: i for i, s in enumerate(SEGMENT_FUNNEL_ORDER)}
+            row_order  = sorted(pivot_sv.index, key=lambda s: funnel_pos.get(s, 999))
+            pivot_sv   = pivot_sv.loc[row_order]
+            z_vals     = pivot_sv.values.tolist()
+            text_vals  = [[f"{v:.1f}%" if v == v else "—" for v in row] for row in z_vals]
+            fig_sv = go.Figure(go.Heatmap(
+                z=z_vals,
+                x=pivot_sv.columns.tolist(),
+                y=pivot_sv.index.tolist(),
+                colorscale=[[0, "#E8DEEE"], [0.5, "#8A5CA8"], [1, "#47254A"]],
+                text=text_vals,
+                texttemplate="%{text}",
+                textfont=dict(size=11),
+                hovertemplate="<b>%{y}</b><br>Partner: %{x}<br>CTR: %{text}<extra></extra>",
+                showscale=True,
+                colorbar=dict(title="CTR %", thickness=12, len=0.7),
+            ))
+            fig_sv.update_layout(
+                height=max(300, len(row_order) * 48 + 60),
+                margin=dict(l=20, r=20, t=10, b=20),
+                plot_bgcolor="white",
+                paper_bgcolor="white",
+                xaxis=dict(side="bottom", tickfont=dict(size=11)),
+                yaxis=dict(tickfont=dict(size=11), autorange="reversed"),
+            )
+            st.plotly_chart(fig_sv, use_container_width=True, key="pp_seg_vendor_heatmap")
         else:
             st.info("No segment data available.")
 
@@ -1384,8 +1452,11 @@ def main():
                 x=asset_ordered["Reach"],
                 y=asset_ordered["Asset"],
                 orientation="h",
-                marker_color=BRAND["primary"],
-                marker_opacity=0.75,
+                marker_color=[
+                    BRAND["primary"] if f == "Programmatic Banner"
+                    else BRAND["plum"]
+                    for f in asset_ordered["Format"]
+                ],
                 marker_cornerradius=4,
             ))
             fig_reach.update_layout(
@@ -1501,53 +1572,75 @@ def main():
             )
             st.plotly_chart(fig_freq, use_container_width=True, key="freq_vs_ctr")
 
-        # ── Audience Segment Performance ───────────────────────────────────────
-        # Stacked reach by format family answers "which formats are reaching
-        # which audience segments?" — the creative-page-specific question.
+        # ── Audience Segment × Format CTR Heatmap ─────────────────────────────
+        # The unique creative-page question: which creative format engages each
+        # journey stage most effectively? The previous stacked reach chart showed
+        # who we're reaching but not how well — the heatmap crosses both dimensions.
+        # Native Display (click-only) and DocNews Alert (engagement-only) have no
+        # valid CTR, so only Programmatic Banner cells are coloured.
         st.markdown(
-            '<div class="section-title">🎯  Reach by Audience Segment &amp; Format</div>',
+            '<div class="section-title">🎯  Prescriber Journey × Creative Format'
+            '<span style="font-size:.65rem;font-weight:500;color:#94a3b8;'
+            'text-transform:none;letter-spacing:normal;margin-left:8px;">'
+            'CTR % — Native Display excluded (click-only, no impressions)'
+            '</span></div>',
             unsafe_allow_html=True,
         )
-        cp_seg_fmt = compute_segment_reach_by_format(df)
+        cp_seg_fmt = compute_segment_by_format(df)
         if len(cp_seg_fmt):
-            # Sort segments by total reach descending so largest bar is on top
-            seg_totals = cp_seg_fmt.groupby("Segment")["Reach"].sum().sort_values()
-            seg_order = seg_totals.index.tolist()  # ascending → top of horizontal bar = highest
+            # Build two pivots: CTR (for heatmap colour) and Reach (for annotation)
+            ctr_pivot   = cp_seg_fmt.pivot(index="Segment", columns="Format", values="CTR")
+            reach_pivot = cp_seg_fmt.pivot(index="Segment", columns="Format", values="Reach")
 
-            fmt_colors = {
-                "Programmatic Banner": BRAND["primary"],
-                "DocNews Alert":       BRAND["plum"],
-                "Native Display":      BRAND["secondary"],
-                "Other":               BRAND["neutral"],
-            }
+            # Enforce funnel order on rows
+            funnel_pos = {s: i for i, s in enumerate(SEGMENT_FUNNEL_ORDER)}
+            row_order  = sorted(ctr_pivot.index, key=lambda s: funnel_pos.get(s, 999))
+            ctr_pivot   = ctr_pivot.loc[row_order]
+            reach_pivot = reach_pivot.loc[row_order]
 
-            fig_stacked = go.Figure()
-            for fmt, color in fmt_colors.items():
-                subset = cp_seg_fmt[cp_seg_fmt["Format"] == fmt]
-                if subset.empty:
-                    continue
-                # Align to full segment list so every trace has the same y-axis length
-                reach_by_seg = subset.set_index("Segment")["Reach"].reindex(seg_order, fill_value=0)
-                fig_stacked.add_trace(go.Bar(
-                    name=fmt,
-                    x=reach_by_seg.values,
-                    y=reach_by_seg.index,
-                    orientation="h",
-                    marker_color=color,
-                    marker_cornerradius=3,
-                ))
+            # Column order: impression-trackable formats only — Native Display is
+            # excluded because it's click-only and has no CTR to show.
+            col_order = [c for c in ["DocNews Alert", "Programmatic Banner", "Other"]
+                         if c in ctr_pivot.columns]
+            ctr_pivot   = ctr_pivot[col_order]
+            reach_pivot = reach_pivot[col_order]
 
-            fig_stacked.update_layout(
-                barmode="stack",
-                height=max(300, len(seg_order) * 40),
+            # Cell text: CTR% for Programmatic Banner, reach count for others
+            text_vals = []
+            for seg in ctr_pivot.index:
+                row_texts = []
+                for fmt in ctr_pivot.columns:
+                    ctr_v   = ctr_pivot.loc[seg, fmt]
+                    reach_v = reach_pivot.loc[seg, fmt]
+                    if fmt == "Programmatic Banner" and ctr_v == ctr_v:
+                        row_texts.append(f"{ctr_v:.1f}%")
+                    elif reach_v == reach_v and reach_v > 0:
+                        row_texts.append(f"{int(reach_v)} HCPs")
+                    else:
+                        row_texts.append("—")
+                text_vals.append(row_texts)
+
+            fig_cp_heat = go.Figure(go.Heatmap(
+                z=ctr_pivot.values.tolist(),
+                x=ctr_pivot.columns.tolist(),
+                y=ctr_pivot.index.tolist(),
+                colorscale=[[0, "#E8DEEE"], [0.5, "#8A5CA8"], [1, "#47254A"]],
+                text=text_vals,
+                texttemplate="%{text}",
+                textfont=dict(size=11),
+                hovertemplate="<b>%{y}</b><br>Format: %{x}<br>%{text}<extra></extra>",
+                showscale=True,
+                colorbar=dict(title="CTR %", thickness=12, len=0.7),
+            ))
+            fig_cp_heat.update_layout(
+                height=max(300, len(row_order) * 48 + 60),
                 margin=dict(l=20, r=20, t=10, b=20),
                 plot_bgcolor="white",
                 paper_bgcolor="white",
-                xaxis=dict(gridcolor="#f1f5f9", title="Unique HCPs"),
-                yaxis=dict(tickfont=dict(size=11)),
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+                xaxis=dict(side="bottom", tickfont=dict(size=11)),
+                yaxis=dict(tickfont=dict(size=11), autorange="reversed"),
             )
-            st.plotly_chart(fig_stacked, use_container_width=True, key="cp_seg_stacked")
+            st.plotly_chart(fig_cp_heat, use_container_width=True, key="cp_seg_format_heatmap")
         else:
             st.info("No segment data available.")
 
@@ -1581,13 +1674,116 @@ def main():
         )
 
     # ╔═══════════════════════════════════════════════════════════════════════╗
-    # ║  VIEW 3 — GEOGRAPHIC DEEP DIVE                                       ║
+    # ║  VIEW 3 — HCP AUDIENCE                                               ║
     # ╚═══════════════════════════════════════════════════════════════════════╝
     else:
 
+        # ── Prescriber Journey Distribution ───────────────────────────────────
+        journey_stages = ["Unaware", "Educate", "Aware", "Trialing", "Adopting", "Advocating"]
+        journey_colors = ["#D9C9E0", "#C5AED4", "#A882BE", "#8A5CA8", "#6B3590", "#47254A"]
+        other_color    = "#BFA8D1"
+        seg_color_map  = {**dict(zip(journey_stages, journey_colors)),
+                           "Deciles Ai": other_color, "Site Visitors": other_color}
+
+        seg_df_all = compute_segment_metrics(df, "All")
+        if len(seg_df_all):
+            journey_df = seg_df_all[seg_df_all["Segment"].isin(journey_stages)].copy()
+            journey_df["_order"] = journey_df["Segment"].map(
+                {s: i for i, s in enumerate(journey_stages)}
+            )
+            journey_df = journey_df.sort_values("_order")
+
+            jc1, jc2 = st.columns([1, 1])
+
+            with jc1:
+                st.markdown(
+                    '<div class="section-title">🎯  Reach by Journey Stage'
+                    '<span style="font-size:.65rem;font-weight:500;color:#94a3b8;'
+                    'text-transform:none;letter-spacing:normal;margin-left:8px;">'
+                    'Unique HCPs reached</span></div>',
+                    unsafe_allow_html=True,
+                )
+                all_segs = journey_df.sort_values("_order", ascending=False)
+
+                fig_seg_bar = go.Figure(go.Bar(
+                    x=all_segs["Reach"],
+                    y=all_segs["Segment"],
+                    orientation="h",
+                    marker_color=[seg_color_map.get(s, other_color) for s in all_segs["Segment"]],
+                    marker_cornerradius=4,
+                    text=all_segs["Reach"].apply(lambda v: f"{v:,}"),
+                    textposition="outside",
+                    hovertemplate="<b>%{y}</b><br>HCPs reached: %{x:,}<extra></extra>",
+                ))
+                fig_seg_bar.update_layout(
+                    height=360,
+                    margin=dict(l=20, r=60, t=10, b=20),
+                    plot_bgcolor="white",
+                    paper_bgcolor="white",
+                    xaxis=dict(gridcolor="#f1f5f9", title="Unique HCPs"),
+                    yaxis=dict(tickfont=dict(size=11)),
+                )
+                st.plotly_chart(fig_seg_bar, use_container_width=True, key="ha_seg_bar")
+
+            with jc2:
+                st.markdown(
+                    '<div class="section-title">📈  CTR % by Journey Stage'
+                    '<span style="font-size:.65rem;font-weight:500;color:#94a3b8;'
+                    'text-transform:none;letter-spacing:normal;margin-left:8px;">'
+                    'Engagement rises as HCPs advance along the journey</span></div>',
+                    unsafe_allow_html=True,
+                )
+                # journey_df already filtered to the 6 stages, ordered Unaware → Advocating.
+                # Exclude click-only NA rows before computing CTR (same rule as heatmap).
+                ctr_filt = df[
+                    df["Segment"].isin(journey_stages) &
+                    ~df["FP_ASSET_ID"].str.startswith("NA", na=False)
+                ]
+                ctr_by_stage = (
+                    ctr_filt.groupby("Segment")
+                    .agg(
+                        Impressions=("ACTIVITY_ID", "count"),
+                        Clicks=("ACTIVITY_TYPE", lambda s: (s == "Click").sum()),
+                    )
+                    .reset_index()
+                )
+                ctr_by_stage["CTR"] = np.where(
+                    ctr_by_stage["Impressions"] > 0,
+                    ctr_by_stage["Clicks"] / ctr_by_stage["Impressions"] * 100,
+                    np.nan,
+                )
+                ctr_by_stage["_order"] = ctr_by_stage["Segment"].map(
+                    {s: i for i, s in enumerate(journey_stages)}
+                )
+                ctr_by_stage = ctr_by_stage.sort_values("_order")
+
+                fig_ctr_stage = go.Figure(go.Bar(
+                    x=ctr_by_stage["CTR"],
+                    y=ctr_by_stage["Segment"],
+                    orientation="h",
+                    marker_color=[seg_color_map.get(s, other_color) for s in ctr_by_stage["Segment"]],
+                    marker_cornerradius=4,
+                    text=ctr_by_stage["CTR"].round(2).astype(str) + "%",
+                    textposition="outside",
+                    hovertemplate="<b>%{y}</b><br>CTR: %{x:.2f}%<extra></extra>",
+                ))
+                fig_ctr_stage.update_layout(
+                    height=360,
+                    margin=dict(l=20, r=60, t=10, b=20),
+                    plot_bgcolor="white",
+                    paper_bgcolor="white",
+                    xaxis=dict(gridcolor="#f1f5f9", title="CTR %"),
+                    yaxis=dict(tickfont=dict(size=11), autorange="reversed"),
+                )
+                st.plotly_chart(fig_ctr_stage, use_container_width=True, key="ha_journey")
+        else:
+            st.info("No segment data available.")
+
+        st.markdown("---")
+
         if data_source == "Real Data":
             st.info(
-                "Geographic Deep Dive requires SPECIALTY and STATE data, which are not "
+                "Geographic analysis requires SPECIALTY and STATE data, which are not "
                 "present in the current dataset. Switch to Mock Data to explore this view.",
                 icon="ℹ️",
             )
