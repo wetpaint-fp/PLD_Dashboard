@@ -23,16 +23,25 @@ Color is always `BRAND["primary"]` (`#47254A`). To use a different color, call `
 
 ## Available Icons
 
-| Constant | Heroicon Name | Used For |
+| Constant | Heroicon Name | Suggested Use |
 |---|---|---|
-| `_IC_CHART_BAR` | `chart-bar` | Monthly Reach & Frequency, Native Display |
-| `_IC_ARROW_TRENDING_UP` | `arrow-trending-up` | CTR % sections, CTR % by Journey Stage |
-| `_IC_VIEWFINDER` | `viewfinder-circle` | Heatmaps (Stage × Partner, Journey × Format) |
-| `_IC_TABLE` | `table-cells` | Detailed Performance, Asset Detail, Comparison List, Specialty Engagement |
-| `_IC_USERS` | `users` | Reach sections, Reach by Journey Stage |
-| `_IC_ADJUSTMENTS` | `adjustments-horizontal` | Analysis Controls / filter panels |
-| `_IC_MAP` | `map` | Cohort Engagement Map |
-| `_IC_CHART_PIE` | `chart-pie` | Frequency vs CTR scatter, Specialty Reach |
+| `_IC_ADJUSTMENTS` | `adjustments-horizontal` | Filters / analysis controls |
+| `_IC_ARROW_TRENDING_UP` | `arrow-trending-up` | CTR, performance metrics |
+| `_IC_BEAKER` | `beaker` | Specialties, science, lab data |
+| `_IC_CALENDAR` | `calendar-days` | Date ranges, time filters |
+| `_IC_CHART_BAR` | `chart-bar` | Reach, volume, bar charts |
+| `_IC_CHART_PIE` | `chart-pie` | Scatter, mix, share of voice |
+| `_IC_CURSOR_RIPPLE` | `cursor-arrow-ripple` | Clicks, engagement events |
+| `_IC_FUNNEL` | `funnel` | Filters, pipeline, journey stages |
+| `_IC_GLOBE` | `globe-americas` | Geography, map views |
+| `_IC_MAP` | `map` | Hex map, geographic drill-down |
+| `_IC_MEGAPHONE` | `megaphone` | Campaigns, reach, awareness |
+| `_IC_SIGNAL` | `signal` | Campaign activity, live metrics |
+| `_IC_TABLE` | `table-cells` | Tables, detail views, grids |
+| `_IC_TV` | `tv` | Creative formats, display ads |
+| `_IC_USERS` | `users` | HCP reach, audience segments |
+| `_IC_VIEWFINDER` | `viewfinder-circle` | Targeting, precision, heatmaps |
+| `_IC_VIEW_COLUMNS` | `view-columns` | Column layouts, side-by-side views |
 
 ---
 
