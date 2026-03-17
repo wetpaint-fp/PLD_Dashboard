@@ -1214,7 +1214,7 @@ def main():
                   </g>
                 </svg>
             </div>
-            <p style="font-size:1rem;font-weight:600;color:#FC8549;text-transform:uppercase;letter-spacing:.08em;margin:6px 0 0 2px;">
+            <p style="font-size:.9rem;font-weight:600;color:#FC8549;text-transform:uppercase;letter-spacing:.08em;margin:6px 0 0 2px;">
                 Revealing the True Colors of Every Brand
             </p>
             """,
@@ -1386,7 +1386,7 @@ def main():
         chart_df = metrics["chart"]
 
         with c1:
-            st.markdown('<div class="section-title">CTR % by Partner</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="section-title">{_icon(_IC_ARROW_TRENDING_UP)}CTR % by Partner</div>', unsafe_allow_html=True)
             fig_ctr = go.Figure(
                 go.Bar(
                     x=chart_df["VENDOR"],
@@ -1410,7 +1410,7 @@ def main():
             st.plotly_chart(fig_ctr, use_container_width=True)
 
         with c2:
-            st.markdown('<div class="section-title">Reach by Partner</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="section-title">{_icon(_IC_USERS)}Reach by Partner</div>', unsafe_allow_html=True)
             fig_reach = go.Figure(
                 go.Bar(
                     x=chart_df["VENDOR"],
@@ -1608,7 +1608,7 @@ def main():
         c1, c2 = st.columns(2)
 
         with c1:
-            st.markdown('<div class="section-title">CTR % by Asset</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="section-title">{_icon(_IC_ARROW_TRENDING_UP)}CTR % by Asset</div>', unsafe_allow_html=True)
             fig_ctr = go.Figure(go.Bar(
                 x=asset_ordered["CTR"],
                 y=asset_ordered["Asset"],
@@ -1634,7 +1634,7 @@ def main():
             st.plotly_chart(fig_ctr, use_container_width=True, key="ctr_by_asset")
 
         with c2:
-            st.markdown('<div class="section-title">Reach by Asset</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="section-title">{_icon(_IC_USERS)}Reach by Asset</div>', unsafe_allow_html=True)
             fig_reach = go.Figure(go.Bar(
                 x=asset_ordered["Reach"],
                 y=asset_ordered["Asset"],
@@ -1659,7 +1659,7 @@ def main():
 
         # ── Native Display — clicks only ────────────────────────────────────────
         if len(native_assets):
-            st.markdown('<div class="section-title">Native Display  <span style="font-size:.65rem;font-weight:500;color:#94a3b8;text-transform:none;letter-spacing:normal;">Clicks only — CTR not applicable</span></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="section-title">{_icon(_IC_CHART_BAR)}Native Display  <span style="font-size:.65rem;font-weight:500;color:#94a3b8;text-transform:none;letter-spacing:normal;">Clicks only — CTR not applicable</span></div>', unsafe_allow_html=True)
             nd_ordered = native_assets.sort_values("Clicks", ascending=True)
             nd_c1, nd_c2 = st.columns(2)
             with nd_c1:
@@ -1706,7 +1706,7 @@ def main():
         c3, c4 = st.columns(2)
 
         with c3:
-            st.markdown('<div class="section-title">CTR % by Format Family  <span style="font-size:.65rem;font-weight:500;color:#94a3b8;text-transform:none;letter-spacing:normal;">Native Display excluded — clicks only</span></div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="section-title">{_icon(_IC_CHART_BAR)}CTR % by Format Family  <span style="font-size:.65rem;font-weight:500;color:#94a3b8;text-transform:none;letter-spacing:normal;">Native Display excluded — clicks only</span></div>', unsafe_allow_html=True)
             fmt_colors = {
                 "Programmatic Banner": BRAND["primary"],
                 "DocNews Alert":       BRAND["plum"],
@@ -1732,7 +1732,7 @@ def main():
             st.plotly_chart(fig_fmt, use_container_width=True, key="ctr_by_format")
 
         with c4:
-            st.markdown('<div class="section-title">Frequency vs CTR</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="section-title">{_icon(_IC_CHART_PIE)}Frequency vs CTR</div>', unsafe_allow_html=True)
             # Click-only assets have no frequency/CTR relationship — exclude from scatter
             scatter_assets = by_asset.dropna(subset=["CTR"])
             fig_freq = go.Figure()
@@ -1843,7 +1843,7 @@ def main():
 
         # ── Asset Detail Table ─────────────────────────────────────────────────
         st.markdown(
-            '<div class="section-title">Asset Detail</div>',
+            f'<div class="section-title">{_icon(_IC_TABLE)}Asset Detail</div>',
             unsafe_allow_html=True,
         )
         detail = by_asset[["Asset", "Format", "Impressions", "Clicks", "CTR", "Reach", "AvgFreq"]].copy()
@@ -2166,7 +2166,7 @@ def main():
             # Only render this section if anything has been highlighted.
             if st.session_state.highlighted:
                 st.markdown("---")
-                st.markdown('<div class="section-title">Comparison List</div>', unsafe_allow_html=True)
+                st.markdown(f'<div class="section-title">{_icon(_IC_TABLE)}Comparison List</div>', unsafe_allow_html=True)
 
                 to_remove = None  # Track which entity to remove (can't modify list while iterating)
 
