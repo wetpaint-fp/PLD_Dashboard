@@ -97,6 +97,151 @@ SEGMENT_FUNNEL_ORDER = [
 
 
 # ─────────────────────────────────────────────────────────────────────────────
+
+# ─────────────────────────────────────────────────────────────────────────────
+# HEROICONS — inline SVG icon system
+# ─────────────────────────────────────────────────────────────────────────────
+# All icons are Heroicons v2 solid (24×24). Inner path content only — the
+# outer <svg> wrapper is added by _icon() which injects BRAND["primary"] fill.
+
+_IC_CHART_BAR = (
+    '<path d="M18.375 2.25C17.3395 2.25 16.5 3.08947 16.5 4.125V19.875C16.5 20.9105'
+    ' 17.3395 21.75 18.375 21.75H19.125C20.1605 21.75 21 20.9105 21 19.875V4.125C21'
+    ' 3.08947 20.1605 2.25 19.125 2.25H18.375Z"/>'
+    '<path d="M9.75 8.625C9.75 7.58947 10.5895 6.75 11.625 6.75H12.375C13.4105 6.75'
+    ' 14.25 7.58947 14.25 8.625V19.875C14.25 20.9105 13.4105 21.75 12.375 21.75H11.625'
+    'C10.5895 21.75 9.75 20.9105 9.75 19.875V8.625Z"/>'
+    '<path d="M3 13.125C3 12.0895 3.83947 11.25 4.875 11.25H5.625C6.66053 11.25 7.5'
+    ' 12.0895 7.5 13.125V19.875C7.5 20.9105 6.66053 21.75 5.625 21.75H4.875C3.83947'
+    ' 21.75 3 20.9105 3 19.875V13.125Z"/>'
+)
+_IC_ARROW_TRENDING_UP = (
+    '<path fill-rule="evenodd" clip-rule="evenodd" d="M15.2194 6.26793C15.3679 5.88122'
+    ' 15.8017 5.68808 16.1884 5.83652L22.1297 8.11716C22.3154 8.18844 22.4651 8.33057'
+    ' 22.546 8.51229C22.627 8.694 22.6324 8.90042 22.5611 9.08612L20.2804 15.0274'
+    'C20.132 15.4141 19.6982 15.6072 19.3115 15.4588C18.9248 15.3104 18.7316 14.8765'
+    ' 18.8801 14.4898L20.5118 10.239L19.4253 10.7227C16.9721 11.815 15.1036 13.6758'
+    ' 13.975 15.8962C13.8662 16.1104 13.6614 16.2594 13.4241 16.2971C13.1869 16.3348'
+    ' 12.946 16.2566 12.7761 16.0868L9 12.3107L2.78033 18.5303C2.48744 18.8232 2.01256'
+    ' 18.8232 1.71967 18.5303C1.42678 18.2374 1.42678 17.7626 1.71967 17.4697L8.46967'
+    ' 10.7197C8.61032 10.579 8.80109 10.5 9 10.5C9.19891 10.5 9.38968 10.579 9.53033'
+    ' 10.7197L13.1363 14.3257C14.4369 12.2046 16.3711 10.4406 18.8152 9.35239L19.9017'
+    ' 8.86864L15.6508 7.23689C15.2641 7.08845 15.071 6.65463 15.2194 6.26793Z"/>'
+)
+_IC_VIEWFINDER = (
+    '<path d="M6 3C4.34315 3 3 4.34315 3 6V7.5C3 7.91421 3.33579 8.25 3.75 8.25'
+    'C4.16421 8.25 4.5 7.91421 4.5 7.5V6C4.5 5.17157 5.17157 4.5 6 4.5H7.5C7.91421'
+    ' 4.5 8.25 4.16421 8.25 3.75C8.25 3.33579 7.91421 3 7.5 3H6Z"/>'
+    '<path d="M16.5 3C16.0858 3 15.75 3.33579 15.75 3.75C15.75 4.16421 16.0858 4.5'
+    ' 16.5 4.5H18C18.8284 4.5 19.5 5.17157 19.5 6V7.5C19.5 7.91421 19.8358 8.25'
+    ' 20.25 8.25C20.6642 8.25 21 7.91421 21 7.5V6C21 4.34315 19.6569 3 18 3H16.5Z"/>'
+    '<path d="M12 8.25C9.92893 8.25 8.25 9.92893 8.25 12C8.25 14.0711 9.92893 15.75'
+    ' 12 15.75C14.0711 15.75 15.75 14.0711 15.75 12C15.75 9.92893 14.0711 8.25 12 8.25Z"/>'
+    '<path d="M4.5 16.5C4.5 16.0858 4.16421 15.75 3.75 15.75C3.33579 15.75 3 16.0858'
+    ' 3 16.5V18C3 19.6569 4.34315 21 6 21H7.5C7.91421 21 8.25 20.6642 8.25 20.25'
+    'C8.25 19.8358 7.91421 19.5 7.5 19.5H6C5.17157 19.5 4.5 18.8284 4.5 18V16.5Z"/>'
+    '<path d="M21 16.5C21 16.0858 20.6642 15.75 20.25 15.75C19.8358 15.75 19.5 16.0858'
+    ' 19.5 16.5V18C19.5 18.8284 18.8284 19.5 18 19.5H16.5C16.0858 19.5 15.75 19.8358'
+    ' 15.75 20.25C15.75 20.6642 16.0858 21 16.5 21H18C19.6569 21 21 19.6569 21 18V16.5Z"/>'
+)
+_IC_TABLE = (
+    '<path fill-rule="evenodd" clip-rule="evenodd" d="M1.5 5.625C1.5 4.58947 2.33947'
+    ' 3.75 3.375 3.75H20.625C21.6605 3.75 22.5 4.58947 22.5 5.625V18.375C22.5 19.4105'
+    ' 21.6605 20.25 20.625 20.25H3.375C2.33947 20.25 1.5 19.4105 1.5 18.375V5.625ZM21'
+    ' 9.375C21 9.16789 20.8321 9 20.625 9H13.125C12.9179 9 12.75 9.16789 12.75 9.375'
+    'V10.875C12.75 11.0821 12.9179 11.25 13.125 11.25H20.625C20.8321 11.25 21 11.0821'
+    ' 21 10.875V9.375ZM21 13.125C21 12.9179 20.8321 12.75 20.625 12.75H13.125C12.9179'
+    ' 12.75 12.75 12.9179 12.75 13.125V14.625C12.75 14.8321 12.9179 15 13.125 15'
+    'H20.625C20.8321 15 21 14.8321 21 14.625V13.125ZM21 16.875C21 16.6679 20.8321'
+    ' 16.5 20.625 16.5H13.125C12.9179 16.5 12.75 16.6679 12.75 16.875V18.375C12.75'
+    ' 18.5821 12.9179 18.75 13.125 18.75H20.625C20.8321 18.75 21 18.5821 21 18.375'
+    'V16.875ZM10.875 18.75C11.0821 18.75 11.25 18.5821 11.25 18.375V16.875C11.25'
+    ' 16.6679 11.0821 16.5 10.875 16.5H3.375C3.16789 16.5 3 16.6679 3 16.875V18.375'
+    'C3 18.5821 3.16789 18.75 3.375 18.75H10.875ZM3.375 15H10.875C11.0821 15 11.25'
+    ' 14.8321 11.25 14.625V13.125C11.25 12.9179 11.0821 12.75 10.875 12.75H3.375'
+    'C3.16789 12.75 3 12.9179 3 13.125V14.625C3 14.8321 3.16789 15 3.375 15ZM3.375'
+    ' 11.25H10.875C11.0821 11.25 11.25 11.0821 11.25 10.875V9.375C11.25 9.16789'
+    ' 11.0821 9 10.875 9H3.375C3.16789 9 3 9.16789 3 9.375V10.875C3 11.0821 3.16789'
+    ' 11.25 3.375 11.25Z"/>'
+)
+_IC_USERS = (
+    '<path d="M4.5 6.375C4.5 4.09683 6.34683 2.25 8.625 2.25C10.9032 2.25 12.75 4.09683'
+    ' 12.75 6.375C12.75 8.65317 10.9032 10.5 8.625 10.5C6.34683 10.5 4.5 8.65317 4.5 6.375Z"/>'
+    '<path d="M14.25 8.625C14.25 6.76104 15.761 5.25 17.625 5.25C19.489 5.25 21 6.76104'
+    ' 21 8.625C21 10.489 19.489 12 17.625 12C15.761 12 14.25 10.489 14.25 8.625Z"/>'
+    '<path d="M1.5 19.125C1.5 15.19 4.68997 12 8.625 12C12.56 12 15.75 15.19 15.75'
+    ' 19.125V19.1276C15.75 19.1674 15.7496 19.2074 15.749 19.2469C15.7446 19.5054'
+    ' 15.6074 19.7435 15.3859 19.8768C13.4107 21.0661 11.0966 21.75 8.625 21.75'
+    'C6.15343 21.75 3.8393 21.0661 1.86406 19.8768C1.64256 19.7435 1.50537 19.5054'
+    ' 1.50103 19.2469C1.50034 19.2064 1.5 19.1657 1.5 19.125Z"/>'
+    '<path d="M17.2498 19.1281C17.2498 19.1762 17.2494 19.2244 17.2486 19.2722'
+    'C17.2429 19.6108 17.1612 19.9378 17.0157 20.232C17.2172 20.2439 17.4203 20.25'
+    ' 17.6248 20.25C19.2206 20.25 20.732 19.8803 22.0764 19.2213C22.3234 19.1002'
+    ' 22.4843 18.8536 22.4957 18.5787C22.4984 18.5111 22.4998 18.4432 22.4998 18.375'
+    'C22.4998 15.6826 20.3172 13.5 17.6248 13.5C16.8784 13.5 16.1711 13.6678 15.5387'
+    ' 13.9676C16.6135 15.4061 17.2498 17.1912 17.2498 19.125V19.1281Z"/>'
+)
+_IC_ADJUSTMENTS = (
+    '<path d="M18.75 12.75L20.25 12.75C20.6642 12.75 21 12.4142 21 12C21 11.5858'
+    ' 20.6642 11.25 20.25 11.25L18.75 11.25C18.3358 11.25 18 11.5858 18 12C18'
+    ' 12.4142 18.3358 12.75 18.75 12.75Z"/>'
+    '<path d="M12 6C12 5.58579 12.3358 5.25 12.75 5.25L20.25 5.25002C20.6642 5.25002'
+    ' 21 5.5858 21 6.00002C21 6.41423 20.6642 6.75002 20.25 6.75002L12.75 6.75'
+    'C12.3358 6.75 12 6.41421 12 6Z"/>'
+    '<path d="M12 18C12 17.5858 12.3358 17.25 12.75 17.25L20.25 17.25C20.6642 17.25'
+    ' 21 17.5858 21 18C21 18.4142 20.6642 18.75 20.25 18.75L12.75 18.75C12.3358 18.75'
+    ' 12 18.4142 12 18Z"/>'
+    '<path d="M3.75001 6.75001L5.25001 6.75C5.66422 6.75 6 6.41421 6 5.99999C6 5.58578'
+    ' 5.66421 5.25 5.24999 5.25L3.74999 5.25001C3.33578 5.25002 3 5.58581 3 6.00002'
+    'C3 6.41424 3.33579 6.75002 3.75001 6.75001Z"/>'
+    '<path d="M5.25001 18.75L3.75001 18.75C3.33579 18.75 3 18.4142 3 18C3 17.5858'
+    ' 3.33578 17.25 3.74999 17.25L5.24999 17.25C5.66421 17.25 6 17.5858 6 18C6'
+    ' 18.4142 5.66422 18.75 5.25001 18.75Z"/>'
+    '<path d="M3 12C3 11.5858 3.33579 11.25 3.75 11.25H11.25C11.6642 11.25 12 11.5858'
+    ' 12 12C12 12.4142 11.6642 12.75 11.25 12.75H3.75C3.33579 12.75 3 12.4142 3 12Z"/>'
+    '<path d="M9 3.75C7.75736 3.75 6.75 4.75736 6.75 6C6.75 7.24264 7.75736 8.25'
+    ' 9 8.25C10.2426 8.25 11.25 7.24264 11.25 6C11.25 4.75736 10.2426 3.75 9 3.75Z"/>'
+    '<path d="M12.75 12C12.75 10.7574 13.7574 9.75 15 9.75C16.2426 9.75 17.25 10.7574'
+    ' 17.25 12C17.25 13.2426 16.2426 14.25 15 14.25C13.7574 14.25 12.75 13.2426'
+    ' 12.75 12Z"/>'
+    '<path d="M9 15.75C7.75736 15.75 6.75 16.7574 6.75 18C6.75 19.2426 7.75736 20.25'
+    ' 9 20.25C10.2426 20.25 11.25 19.2426 11.25 18C11.25 16.7574 10.2426 15.75 9 15.75Z"/>'
+)
+_IC_MAP = (
+    '<path fill-rule="evenodd" clip-rule="evenodd" d="M8.16147 2.58076C8.68934 2.31683'
+    ' 9.31066 2.31683 9.83853 2.58076L14.8323 5.07765C14.9379 5.13043 15.0621 5.13043'
+    ' 15.1677 5.07765L19.0365 3.14326C20.2832 2.51992 21.75 3.42647 21.75 4.82031'
+    'V17.3047C21.75 18.0149 21.3487 18.6642 20.7135 18.9818L15.8385 21.4193C15.3107'
+    ' 21.6832 14.6893 21.6832 14.1615 21.4193L9.16771 18.9224C9.06213 18.8696 8.93787'
+    ' 18.8696 8.8323 18.9224L4.96353 20.8568C3.71683 21.4801 2.25 20.5736 2.25 19.1797'
+    'V6.69531C2.25 5.98512 2.65125 5.33587 3.28647 5.01826L8.16147 2.58076ZM9 6.00002'
+    'C9.41421 6.00002 9.75 6.3358 9.75 6.75002V15C9.75 15.4142 9.41421 15.75 9 15.75'
+    'C8.58579 15.75 8.25 15.4142 8.25 15V6.75002C8.25 6.3358 8.58579 6.00002 9 6.00002'
+    'ZM15.75 9.00002C15.75 8.5858 15.4142 8.25002 15 8.25002C14.5858 8.25002 14.25'
+    ' 8.5858 14.25 9.00002V17.25C14.25 17.6642 14.5858 18 15 18C15.4142 18 15.75'
+    ' 17.6642 15.75 17.25V9.00002Z"/>'
+)
+_IC_CHART_PIE = (
+    '<path fill-rule="evenodd" clip-rule="evenodd" d="M2.25 13.5C2.25 8.94365 5.94365'
+    ' 5.25 10.5 5.25C10.9142 5.25 11.25 5.58579 11.25 6V12.75H18C18.4142 12.75 18.75'
+    ' 13.0858 18.75 13.5C18.75 18.0563 15.0563 21.75 10.5 21.75C5.94365 21.75 2.25'
+    ' 18.0563 2.25 13.5Z"/>'
+    '<path fill-rule="evenodd" clip-rule="evenodd" d="M12.75 3C12.75 2.58579 13.0858'
+    ' 2.25 13.5 2.25C18.0563 2.25 21.75 5.94365 21.75 10.5C21.75 10.9142 21.4142 11.25'
+    ' 21 11.25H13.5C13.0858 11.25 12.75 10.9142 12.75 10.5V3Z"/>'
+)
+
+
+def _icon(inner: str, size: int = 14) -> str:
+    """Wrap Heroicon inner SVG paths in a sized, brand-coloured <svg> tag."""
+    return (
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"'
+        f' fill="{BRAND["primary"]}" width="{size}" height="{size}"'
+        f' style="vertical-align:-2px;margin-right:6px;">'
+        f'{inner}</svg>'
+    )
+
+
 # CUSTOM CSS
 # ─────────────────────────────────────────────────────────────────────────────
 # st.markdown() renders HTML/Markdown in the app.
@@ -1069,6 +1214,9 @@ def main():
                   </g>
                 </svg>
             </div>
+            <p style="font-size:1rem;font-weight:600;color:#FC8549;text-transform:uppercase;letter-spacing:.08em;margin:6px 0 0 2px;">
+                Revealing the True Colors of Every Brand
+            </p>
             """,
             unsafe_allow_html=True,
         )
@@ -1132,9 +1280,6 @@ def main():
         f"""
         <div style="margin-bottom:.25rem;">
             <h1 style="font-size:1.75rem;font-weight:800;color:#050607;margin:0;">{header_title}</h1>
-            <p style="font-size:.75rem;font-weight:600;color:#FC8549;text-transform:uppercase;letter-spacing:.08em;margin:0;">
-                Revealing the True Colors of Every Brand
-            </p>
         </div>
         """,
         unsafe_allow_html=True,
@@ -1181,7 +1326,7 @@ def main():
         # ── Monthly Trend Chart ────────────────────────────────────────────────
         trend = compute_trend_data(df, vendor_filter)
 
-        st.markdown('<div class="section-title">📈  Monthly Reach & Frequency</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="section-title">{_icon(_IC_CHART_BAR)}Monthly Reach & Frequency</div>', unsafe_allow_html=True)
 
         # make_subplots(specs=[[{"secondary_y": True}]]) creates a Plotly figure
         # with a secondary Y axis on the right side. This lets us plot Reach
@@ -1287,7 +1432,7 @@ def main():
 
         # ── CTR by Stage × Partner Heatmap ────────────────────────────────────
         st.markdown(
-            '<div class="section-title">🎯  CTR % by Stage × Partner'
+            f'<div class="section-title">{_icon(_IC_VIEWFINDER)}CTR % by Stage × Partner'
             '<span style="font-size:.65rem;font-weight:500;color:#94a3b8;'
             'text-transform:none;letter-spacing:normal;margin-left:8px;">'
             'Darker = higher CTR</span></div>',
@@ -1368,7 +1513,7 @@ def main():
 
         # ── Drill-Down Table ───────────────────────────────────────────────────
         st.markdown(
-            '<div class="section-title">📊  Detailed Performance  '
+            f'<div class="section-title">{_icon(_IC_TABLE)}Detailed Performance  '
             '<span style="font-size:.65rem;font-weight:500;color:#94a3b8;text-transform:none;letter-spacing:normal;">'
             "Partner → Channel → Program</span></div>",
             unsafe_allow_html=True,
@@ -1630,7 +1775,7 @@ def main():
         # Native Display (click-only) and DocNews Alert (engagement-only) have no
         # valid CTR, so only Programmatic Banner cells are coloured.
         st.markdown(
-            '<div class="section-title">🎯  Prescriber Journey × Creative Format'
+            f'<div class="section-title">{_icon(_IC_VIEWFINDER)}Prescriber Journey × Creative Format'
             '<span style="font-size:.65rem;font-weight:500;color:#94a3b8;'
             'text-transform:none;letter-spacing:normal;margin-left:8px;">'
             'CTR % — Native Display excluded (click-only, no impressions)'
@@ -1749,7 +1894,7 @@ def main():
 
             with jc1:
                 st.markdown(
-                    '<div class="section-title">🎯  Reach by Journey Stage'
+                    f'<div class="section-title">{_icon(_IC_USERS)}Reach by Journey Stage'
                     '<span style="font-size:.65rem;font-weight:500;color:#94a3b8;'
                     'text-transform:none;letter-spacing:normal;margin-left:8px;">'
                     'Unique HCPs reached</span></div>',
@@ -1780,7 +1925,7 @@ def main():
 
             with jc2:
                 st.markdown(
-                    '<div class="section-title">📈  CTR % by Journey Stage'
+                    f'<div class="section-title">{_icon(_IC_ARROW_TRENDING_UP)}CTR % by Journey Stage'
                     '<span style="font-size:.65rem;font-weight:500;color:#94a3b8;'
                     'text-transform:none;letter-spacing:normal;margin-left:8px;">'
                     'Engagement rises as HCPs advance along the journey</span></div>',
@@ -1843,6 +1988,115 @@ def main():
             )
             return
 
+        # ── Specialties: Treemap + Bubble Chart ───────────────────────────────
+        # Two side-by-side views of the same specialty data.
+        # Treemap: area = reach (who we touched); no CTR to keep it a pure
+        #          volume overview. Bubble: x = avg frequency, y = CTR %,
+        #          size = reach — shows engagement vs. exposure in one view.
+        # Both use the same brand palette so colors are consistent across charts.
+        spec_geo = compute_geo_analysis(df, "specialty", "All")
+        spec_df = spec_geo["data"].copy()
+
+        # Assign each specialty a consistent brand palette color by index
+        spec_colors = [
+            BRAND["palette"][i % len(BRAND["palette"])]
+            for i in range(len(spec_df))
+        ]
+        spec_df["color"] = spec_colors
+
+        tree_col, bubble_col = st.columns(2)
+
+        with tree_col:
+            st.markdown(
+                f'<div class="section-title">{_icon(_IC_CHART_PIE)}Specialty Reach'
+                '<span style="font-size:.65rem;font-weight:500;color:#94a3b8;'
+                'text-transform:none;letter-spacing:normal;margin-left:8px;">'
+                'HCPs Reached by Specialty</span></div>',
+                unsafe_allow_html=True,
+            )
+            fig_spec_tree = go.Figure(
+                go.Treemap(
+                    labels=spec_df["name"],
+                    parents=[""] * len(spec_df),
+                    values=spec_df["npiCount"],
+                    customdata=spec_df[["name", "npiCount"]].values,
+                    hovertemplate=(
+                        "<b>%{customdata[0]}</b><br>"
+                        "HCPs Reached:<br>%{customdata[1]}<extra></extra>"
+                    ),
+                    texttemplate="<b>%{label}</b><br>%{value} HCPs",
+                    textfont=dict(size=13),
+                    marker=dict(colors=spec_colors, pad=dict(t=2, l=2, r=2, b=2)),
+                )
+            )
+            fig_spec_tree.update_layout(
+                height=340,
+                margin=dict(l=0, r=0, t=0, b=0),
+                paper_bgcolor="white",
+            )
+            fig_spec_tree.update_traces(hoverlabel=PLOTLY_HOVERLABEL)
+            st.plotly_chart(fig_spec_tree, use_container_width=True, key="spec_treemap")
+
+        with bubble_col:
+            st.markdown(
+                f'<div class="section-title">{_icon(_IC_TABLE)}Specialty Engagement'
+                '<span style="font-size:.65rem;font-weight:500;color:#94a3b8;'
+                'text-transform:none;letter-spacing:normal;margin-left:8px;">'
+                'Frequency vs. CTR %</span></div>',
+                unsafe_allow_html=True,
+            )
+            # Square-root scale: perceptually correct for bubble area encoding.
+            # Scaled so the largest specialty lands around 60px diameter.
+            max_count = spec_df["npiCount"].max() or 1
+            spec_df["size_px"] = (spec_df["npiCount"] / max_count).pow(0.5) * 60
+
+            fig_spec_bubble = go.Figure()
+            fig_spec_bubble.add_trace(
+                go.Scatter(
+                    x=spec_df["impressions"],
+                    y=spec_df["ctr"],
+                    mode="markers+text",
+                    marker=dict(
+                        size=spec_df["size_px"],
+                        color=spec_df["color"],
+                        opacity=0.85,
+                        line=dict(width=1, color="white"),
+                    ),
+                    text=spec_df["name"],
+                    textposition="top center",
+                    textfont=dict(size=9, color="#64748b"),
+                    customdata=spec_df[["name", "npiCount", "impressions", "ctr"]].values,
+                    hovertemplate=(
+                        "<b>%{customdata[0]}</b><br>"
+                        "HCPs:<br>%{customdata[1]}<br>"
+                        "Avg Freq:<br>%{customdata[2]:.1f}<br>"
+                        "CTR:<br>%{customdata[3]:.2f}%<extra></extra>"
+                    ),
+                )
+            )
+            fig_spec_bubble.update_layout(
+                height=340,
+                margin=dict(l=40, r=20, t=20, b=50),
+                plot_bgcolor="white",
+                paper_bgcolor="white",
+                xaxis=dict(title="Avg Frequency per HCP", gridcolor="#f1f5f9"),
+                yaxis=dict(title="CTR %", gridcolor="#f1f5f9"),
+            )
+            fig_spec_bubble.update_traces(hoverlabel=PLOTLY_HOVERLABEL)
+            st.plotly_chart(fig_spec_bubble, use_container_width=True, key="spec_bubble")
+
+            st.markdown(
+                """
+                <div style="text-align:center;font-size:.65rem;font-weight:700;
+                            color:#94a3b8;text-transform:uppercase;">
+                    Bubble size = Population (Reach)
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        st.markdown("---")
+
         # ── Session State ──────────────────────────────────────────────────────
         # st.session_state is a dictionary-like object that persists across
         # reruns for the duration of a browser session.
@@ -1861,27 +2115,16 @@ def main():
         ctrl_col, viz_col = st.columns([1, 2.5])
 
         with ctrl_col:
-            st.markdown('<div class="section-title">🔍  Analysis Controls</div>', unsafe_allow_html=True)
+            st.markdown(f'<div class="section-title">{_icon(_IC_ADJUSTMENTS)}Analysis Controls</div>', unsafe_allow_html=True)
 
-            # Toggle between State-level and Specialty-level analysis
-            # format_func= lets you display custom labels while the returned
-            # value is still the raw option ("state" / "specialty")
-            analysis_level = st.radio(
-                "Analysis Level",
-                ["state", "specialty"],
-                format_func=lambda x: "States" if x == "state" else "Specialties",
-                horizontal=True,   # Renders options side-by-side instead of stacked
-                key="analysis_level",
-            )
+            analysis_level = "state"
 
             # First compute with "All" to get the full list of filter options
             geo = compute_geo_analysis(df, analysis_level, "All")
 
-            # The filter options change depending on analysis_level:
-            # - If viewing states, the filter is by Specialty
-            # - If viewing specialties, the filter is by State
+            # Filter by Specialty to narrow the state hex map
             analysis_filter = st.selectbox(
-                f"Filter {geo['filter_label']}",
+                "Filter Specialty",
                 ["All"] + geo["filter_options"],
                 key="analysis_filter",
             )
@@ -1892,7 +2135,7 @@ def main():
             # ── Entity selector for comparison list ──
             entity_options = geo["data"]["name"].tolist()
             selected_entity = st.selectbox(
-                f"Highlight {geo['entity']}",
+                "Highlight State",
                 [""] + entity_options,
                 format_func=lambda x: "Select to compare…" if x == "" else x,
                 key="entity_sel",
@@ -1910,17 +2153,14 @@ def main():
                 st.session_state.highlighted.append(selected_entity)
                 st.rerun()
 
-            # Color-by metric selector (only relevant for the hex map)
-            if analysis_level == "state":
-                map_metric = st.radio(
-                    "Color By",
-                    ["ctr", "impressions"],
-                    format_func=lambda x: "CTR %" if x == "ctr" else "Avg Frequency",
-                    horizontal=True,
-                    key="map_metric",
-                )
-            else:
-                map_metric = "ctr"  # Scatter plot always colors by CTR (via BRAND palette)
+            # Color-by metric selector for the hex map
+            map_metric = st.radio(
+                "Color By",
+                ["ctr", "impressions"],
+                format_func=lambda x: "CTR %" if x == "ctr" else "Avg Frequency",
+                horizontal=True,
+                key="map_metric",
+            )
 
             # ── Comparison List ────────────────────────────────────────────────
             # Only render this section if anything has been highlighted.
@@ -1976,136 +2216,49 @@ def main():
         with viz_col:
             highlighted_list = st.session_state.highlighted
 
-            if analysis_level == "state":
-                # ── Hex Map ────────────────────────────────────────────────────
-                st.markdown(
-                    '<div class="section-title">🗺️  Cohort Engagement Map'
-                    f'<span style="font-size:.65rem;font-weight:500;color:#94a3b8;text-transform:none;letter-spacing:normal;margin-left:8px;">'
-                    f'Comparing States by Impact</span></div>',
-                    unsafe_allow_html=True,
-                )
+            # ── Hex Map ────────────────────────────────────────────────────────
+            st.markdown(
+                f'<div class="section-title">{_icon(_IC_MAP)}Cohort Engagement Map'
+                f'<span style="font-size:.65rem;font-weight:500;color:#94a3b8;text-transform:none;letter-spacing:normal;margin-left:8px;">'
+                f'Comparing States by Impact</span></div>',
+                unsafe_allow_html=True,
+            )
 
-                # Convert the aggregated DataFrame into the dict format that
-                # build_hex_map_figure() expects: { "CA": {metrics...}, ... }
-                state_data = {}
-                for _, row in geo["data"].iterrows():
-                    state_data[row["name"]] = {
-                        "ctr": row["ctr"],
-                        "impressions": row["impressions"],
-                        "npiCount": int(row["npiCount"]),
-                    }
+            # Convert the aggregated DataFrame into the dict format that
+            # build_hex_map_figure() expects: { "CA": {metrics...}, ... }
+            state_data = {}
+            for _, row in geo["data"].iterrows():
+                state_data[row["name"]] = {
+                    "ctr": row["ctr"],
+                    "impressions": row["impressions"],
+                    "npiCount": int(row["npiCount"]),
+                }
 
-                max_val = geo["max_ctr"] if map_metric == "ctr" else geo["max_imps"]
-                fig_map = build_hex_map_figure(state_data, map_metric, max_val, highlighted_list)
+            max_val = geo["max_ctr"] if map_metric == "ctr" else geo["max_imps"]
+            fig_map = build_hex_map_figure(state_data, map_metric, max_val, highlighted_list)
 
-                # key= on st.plotly_chart() prevents flickering when the same
-                # chart re-renders with new data. Without it, Streamlit may
-                # re-create the chart element from scratch and cause a flash.
-                fig_map.update_traces(hoverlabel=PLOTLY_HOVERLABEL)
-                st.plotly_chart(fig_map, use_container_width=True, key="hex_map")
+            # key= on st.plotly_chart() prevents flickering when the same
+            # chart re-renders with new data. Without it, Streamlit may
+            # re-create the chart element from scratch and cause a flash.
+            fig_map.update_traces(hoverlabel=PLOTLY_HOVERLABEL)
+            st.plotly_chart(fig_map, use_container_width=True, key="hex_map")
 
-                # Manual color scale legend (Plotly's built-in colorbar doesn't
-                # work well with custom scatter-polygon hex maps)
-                metric_label = f"{max_val:.1f}%" if map_metric == "ctr" else f"{max_val:.1f}"
-                st.markdown(
-                    f"""
-                    <div style="display:flex;align-items:center;justify-content:center;gap:8px;
-                                font-size:.65rem;font-weight:700;color:#94a3b8;text-transform:uppercase;">
-                        <span>Low</span>
-                        <div style="width:120px;height:10px;border-radius:999px;
-                                    background:linear-gradient(to right,#FEF0E9,#C2521B);"></div>
-                        <span>High ({metric_label})</span>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
+            # Manual color scale legend (Plotly's built-in colorbar doesn't
+            # work well with custom scatter-polygon hex maps)
+            metric_label = f"{max_val:.1f}%" if map_metric == "ctr" else f"{max_val:.1f}"
+            st.markdown(
+                f"""
+                <div style="display:flex;align-items:center;justify-content:center;gap:8px;
+                            font-size:.65rem;font-weight:700;color:#94a3b8;text-transform:uppercase;">
+                    <span>Low</span>
+                    <div style="width:120px;height:10px;border-radius:999px;
+                                background:linear-gradient(to right,#FEF0E9,#C2521B);"></div>
+                    <span>High ({metric_label})</span>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
-            else:
-                # ── Scatter / Bubble Plot ──────────────────────────────────────
-                st.markdown(
-                    '<div class="section-title">🔬  Cohort Engagement Matrix'
-                    f'<span style="font-size:.65rem;font-weight:500;color:#94a3b8;text-transform:none;letter-spacing:normal;margin-left:8px;">'
-                    f'Comparing Specialties by Impact</span></div>',
-                    unsafe_allow_html=True,
-                )
-
-                scatter_df = geo["data"].copy()
-                # Bubble size = HCP count. clip(lower=5) prevents invisible
-                # tiny dots. Multiplying by 1.5 scales up for visibility.
-                scatter_df["size_px"] = scatter_df["npiCount"].clip(lower=5) * 1.5
-
-                # Build color and opacity arrays row-by-row.
-                # When something is highlighted: highlighted items are bold/red,
-                # everything else fades to near-transparent gray.
-                # When nothing is highlighted: use the brand color palette.
-                colors = []
-                opacities = []
-                has_hl = len(highlighted_list) > 0
-                for _, row in scatter_df.iterrows():
-                    if has_hl:
-                        if row["name"] in highlighted_list:
-                            colors.append(BRAND["primary"])
-                            opacities.append(1.0)
-                        else:
-                            colors.append("#cbd5e1")  # slate-300 — muted
-                            opacities.append(0.3)
-                    else:
-                        # Cycle through the brand palette using modulo
-                        idx = _ % len(BRAND["palette"])
-                        colors.append(BRAND["palette"][idx])
-                        opacities.append(0.8)
-
-                scatter_df["color"] = colors
-                scatter_df["opacity"] = opacities
-
-                fig_scatter = go.Figure()
-                fig_scatter.add_trace(
-                    go.Scatter(
-                        x=scatter_df["impressions"],  # X axis: avg frequency
-                        y=scatter_df["ctr"],           # Y axis: CTR %
-                        mode="markers+text",           # Show both bubbles and labels
-                        marker=dict(
-                            size=scatter_df["size_px"],
-                            color=scatter_df["color"],
-                            opacity=scatter_df["opacity"],
-                            line=dict(width=1, color="white"),  # White border on bubbles
-                        ),
-                        text=scatter_df["name"],
-                        textposition="top center",
-                        textfont=dict(size=9, color="#64748b"),
-                        # customdata attaches extra data per point for use in tooltips.
-                        # %{customdata[0]} in hovertemplate references the first column.
-                        customdata=scatter_df[["name", "npiCount", "impressions", "ctr"]].values,
-                        hovertemplate=(
-                            "<b>%{customdata[0]}</b><br>"
-                            "HCPs:<br>%{customdata[1]}<br>"
-                            "Avg Freq:<br>%{customdata[2]:.1f}<br>"
-                            "CTR:<br>%{customdata[3]:.2f}%<extra></extra>"
-                            # <extra></extra> suppresses Plotly's default
-                            # trace name tooltip suffix
-                        ),
-                    )
-                )
-                fig_scatter.update_layout(
-                    height=480,
-                    margin=dict(l=40, r=20, t=20, b=50),
-                    plot_bgcolor="white",
-                    paper_bgcolor="white",
-                    xaxis=dict(title="Avg Frequency per HCP", gridcolor="#f1f5f9"),
-                    yaxis=dict(title="CTR %", gridcolor="#f1f5f9"),
-                )
-                fig_scatter.update_traces(hoverlabel=PLOTLY_HOVERLABEL)
-                st.plotly_chart(fig_scatter, use_container_width=True, key="scatter")
-
-                st.markdown(
-                    """
-                    <div style="text-align:center;font-size:.65rem;font-weight:700;
-                                color:#94a3b8;text-transform:uppercase;">
-                        Bubble size = Population (Reach)
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
