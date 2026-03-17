@@ -2235,6 +2235,57 @@ def main():
             )
             journey_df = journey_df.sort_values("_order")
 
+            # ── KPI Row ────────────────────────────────────────────────────────
+            # Audience-quality KPIs distinct from Partner Performance delivery metrics.
+            total_hcps = int(journey_df["Reach"].sum())
+            lower_funnel_reach = int(
+                journey_df[journey_df["Segment"].isin(["Trialing", "Adopting", "Advocating"])]["Reach"].sum()
+            )
+            lower_funnel_pct = round(lower_funnel_reach / total_hcps * 100, 0) if total_hcps else 0
+
+            # Most active stage = highest CTR among journey stages with impressions
+            ctr_stages = journey_df.dropna(subset=["CTR"])
+            if len(ctr_stages):
+                best_stage_row = ctr_stages.loc[ctr_stages["CTR"].idxmax()]
+                best_stage      = best_stage_row["Segment"]
+                best_stage_ctr  = best_stage_row["CTR"]
+            else:
+                best_stage, best_stage_ctr = "—", 0.0
+
+            # Top specialty by reach (mock data only; real data has "Unknown")
+            spec_quick = compute_geo_analysis(df, "specialty", "All")["data"]
+            spec_quick = spec_quick[spec_quick["name"] != "Unknown"]
+            if len(spec_quick):
+                top_spec_row = spec_quick.loc[spec_quick["npiCount"].idxmax()]
+                top_spec      = top_spec_row["name"]
+                top_spec_npis = int(top_spec_row["npiCount"])
+            else:
+                top_spec, top_spec_npis = "—", 0
+
+            ak1, ak2, ak3, ak4 = st.columns(4)
+            with ak1:
+                kpi_card("Unique HCPs Reached", f"{total_hcps:,}", "Journey stages")
+            with ak2:
+                kpi_card(
+                    "Lower Funnel %",
+                    f"{lower_funnel_pct:.0f}%",
+                    f"{lower_funnel_reach:,} Trialing–Advocating",
+                )
+            with ak3:
+                kpi_card(
+                    "Most Active Stage",
+                    best_stage,
+                    f"{best_stage_ctr:.2f}% CTR",
+                )
+            with ak4:
+                kpi_card(
+                    "Top Specialty",
+                    top_spec,
+                    f"{top_spec_npis:,} HCPs" if top_spec != "—" else "",
+                )
+
+            st.markdown("")
+
             jc1, jc2 = st.columns([1, 1])
 
             with jc1:
