@@ -1,0 +1,18 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+
+# Raw data — keep out of version control
+raw_data/
+
+# Claude memory (local only)
+.claude/
+
+# Streamlit cache
+.streamlit/secrets.toml
